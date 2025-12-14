@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+  <title>$1 Zombies FPS (Multiplayer) v2</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="three"></canvas>
+    <canvas id="fx"></canvas>
+
+    <div id="hud">
+      <div class="top">
+        <div class="brand">
+          <div class="t">$1 Zombies FPS</div>
+          <div class="s">Co-op waves. Pick a gun each round. No repeats, 3-round cooldown.</div>
+        </div>
+        <div class="right">
+          <button id="btnPause" class="btn">Pause</button>
+          <button id="btnDev" class="btn">Dev</button>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="pill"><span class="k">HP</span><span id="hp" class="v">100</span></div>
+        <div class="pill"><span class="k">$</span><span id="cash" class="v">20</span></div>
+        <div class="pill"><span class="k">Wave</span><span id="wave" class="v">1</span></div>
+        <div class="pill"><span class="k">Z</span><span id="z" class="v">0/0</span></div>
+        <div class="pill"><span class="k">Weapon</span><span id="weapon" class="v">…</span></div>
+        <div class="pill"><span class="k">Ammo</span><span id="ammo" class="v">—</span></div>
+      </div>
+
+      <div id="toast" class="toast"></div>
+
+      <div id="crosshair">
+        <div class="c1"></div><div class="c2"></div><div class="dot"></div>
+      </div>
+
+      <div id="panelStart" class="panel">
+        <div class="panelTitle">Click to enter (Pointer Lock)</div>
+        <div class="panelBody">
+          <p>
+            <b>WASD</b> move · <b>Mouse</b> aim · <b>Click</b> shoot · <b>R</b> reload · <b>1/2</b> pistol/primary.
+            Between waves: pick a primary and upgrades.
+          </p>
+          <button id="btnPlay" class="btn primary">Play</button>
+        </div>
+      </div>
+
+      <div id="panelRound" class="panel hidden">
+        <div class="panelTitle">Between Rounds</div>
+        <div class="panelBody">
+          <div class="grid">
+            <div class="card">
+              <div class="h">Pick Primary</div>
+              <div id="primaryList" class="list"></div>
+              <div class="note">Rule: cannot pick the same gun twice in a row, and a picked gun locks for 3 rounds.</div>
+            </div>
+
+            <div class="card">
+              <div class="h">Pick Pistol</div>
+              <div id="pistolList" class="list"></div>
+              <div class="note">Pistol swaps are only allowed between rounds.</div>
+            </div>
+
+            <div class="card">
+              <div class="h">Upgrades</div>
+              <div class="list">
+                <button class="item" data-buy="medkit"><span>Medkit</span><b>$10</b></button>
+                <button class="item" data-buy="armor"><span>Armor (-25% dmg)</span><b>$40</b></button>
+                <button class="item" data-buy="speed"><span>Speed Boost</span><b>$25</b></button>
+              </div>
+              <button id="btnReady" class="btn primary wide">Start Next Wave</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      
+
+      <div id="devMenu" class="dev hidden">
+        <div class="devTop">
+          <div class="devTitle">Dev Menu</div>
+          <div class="devActions">
+            <button id="btnDevClose" class="btn">Close</button>
+          </div>
+        </div>
+        <div id="devBody" class="devBody"></div>
+      </div>
+
+      <div class="footer">
+        <span id="status">Connecting…</span>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="client.js"></script>
+  <script src="fx.js"></script>
+</body>
+</html>
