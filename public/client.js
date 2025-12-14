@@ -47,6 +47,7 @@ function isAutoWeapon(id){
 
 let myId = null;
 let arena = { size: 120 };
+let obstacles = [];
 let weapons = {};
 let lists = { primary:[], pistols:[] };
 let round = { between:true, wave:1, zombiesTarget:0, zombiesSpawned:0, zombiesKilled:0 };
@@ -73,10 +74,12 @@ function onMsg(msg){
   if (msg.type === "welcome"){
     myId = msg.id;
     arena = msg.arena;
+    obstacles = msg.obstacles || [];
     weapons = msg.weapons;
     lists = msg.lists;
     round = msg.round;
     buildArena();
+    rebuildObstacles();
     rebuildLists();
     ui.status.textContent = `Welcome ${myId}.`;
     setRoundUI(round.between);
@@ -288,6 +291,47 @@ function renderDevMenu(){
   tip.textContent = "Tip: press ` to toggle this menu. Auto guns fire while holding mouse.";
   s3.appendChild(tip);
   ui.devBody.appendChild(s3);
+
+  // Spawning helpers (foundation for scripting)
+  const s4 = section("Spawner Helpers");
+  const pos = document.createElement('div');
+  pos.className = 'devMono';
+  if (me){
+    pos.textContent = `pos: x=${me.x.toFixed(2)} z=${me.z.toFixed(2)}  yaw=${state.yaw.toFixed(3)} pitch=${state.pitch.toFixed(3)}`;
+  } else {
+    pos.textContent = 'pos: —';
+  }
+  const mkCopy = (label, textFn)=>{
+    const b = document.createElement('button');
+    b.className = 'btn';
+    b.textContent = label;
+    b.onclick = async ()=>{
+      try{
+        const t = textFn();
+        await navigator.clipboard.writeText(t);
+        toast('Copied to clipboard');
+      } catch {
+        toast('Copy failed');
+      }
+    };
+    return b;
+  };
+  s4.appendChild(pos);
+  s4.appendChild(mkCopy('Copy: spawn zombie here', ()=>{
+    if (!me) return '';
+    return `spawn zombie x=${me.x.toFixed(2)} z=${me.z.toFixed(2)}`;
+  }));
+  s4.appendChild(mkCopy('Copy: spawn box here', ()=>{
+    if (!me) return '';
+    return `spawn box x=${me.x.toFixed(2)} z=${me.z.toFixed(2)} hx=1.2 hz=1.2 h=1.4`;
+  }));
+  const note = document.createElement('div');
+  note.style.opacity = .75;
+  note.style.fontSize = '12px';
+  note.style.marginTop = '10px';
+  note.textContent = 'These lines match scripts/level1.dzs (server reads it on startup).';
+  s4.appendChild(note);
+  ui.devBody.appendChild(s4);
 }
 
 function rebuildLists(){
@@ -318,12 +362,28 @@ document.querySelectorAll("[data-buy]").forEach(el=>{
 ui.btnPause.onclick = () => {
   paused = !paused;
   ui.btnPause.textContent = paused ? "Resume" : "Pause";
+  if (paused){
+    // free the cursor so UI clicks work
+    if (document.pointerLockElement) document.exitPointerLock();
+  } else {
+    // lock cursor back in
+    renderer.domElement.requestPointerLock();
+  }
 };
 
 function toggleDevMenu(force){
   const show = (force != null) ? !!force : ui.devMenu.classList.contains("hidden");
   ui.devMenu.classList.toggle("hidden", !show);
-  if (show) renderDevMenu();
+  if (show){
+    renderDevMenu();
+    clearInterval(toggleDevMenu._t);
+    toggleDevMenu._t = setInterval(()=>{
+      if (ui.devMenu.classList.contains('hidden')) return;
+      renderDevMenu();
+    }, 450);
+  } else {
+    clearInterval(toggleDevMenu._t);
+  }
 }
 
 ui.btnDev?.addEventListener("click", ()=> toggleDevMenu());
@@ -406,29 +466,96 @@ dir.shadow.camera.top = 70;
 dir.shadow.camera.bottom = -70;
 scene.add(dir);
 
-// Floor with subtle texture-like grid using normal map-ish trick: just multiple planes
-const floorMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.95, metalness: 0.0 });
+function makeCanvasTexture(drawFn, size=256){
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  drawFn(ctx, size);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy?.() || 4);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+const grassTex = makeCanvasTexture((ctx, s)=>{
+  ctx.fillStyle = '#0b2a13';
+  ctx.fillRect(0,0,s,s);
+  // mottled noise
+  for (let i=0;i<18000;i++){
+    const x = (Math.random()*s)|0;
+    const y = (Math.random()*s)|0;
+    const g = 60 + (Math.random()*110)|0;
+    const a = 0.08 + Math.random()*0.18;
+    ctx.fillStyle = `rgba(20,${g},35,${a})`;
+    ctx.fillRect(x,y,1,1);
+  }
+  // subtle blade streaks
+  ctx.globalAlpha = 0.10;
+  for (let i=0;i<220;i++){
+    ctx.strokeStyle = `rgb(${20+Math.random()*20|0},${110+Math.random()*80|0},${30+Math.random()*30|0})`;
+    ctx.beginPath();
+    const x = Math.random()*s;
+    ctx.moveTo(x, Math.random()*s);
+    ctx.lineTo(x + (Math.random()*10-5), Math.random()*s);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}, 256);
+grassTex.repeat.set(24,24);
+
+// Floor
+const floorMat = new THREE.MeshStandardMaterial({ color: 0x18301e, roughness: 1.0, metalness: 0.0, map: grassTex });
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(500,500,1,1), floorMat);
 floor.rotation.x = -Math.PI/2;
 floor.receiveShadow = true;
 scene.add(floor);
 
-// Decorative props to make 3D depth obvious
+// Obstacles (server-authoritative)
 const props = new THREE.Group();
 scene.add(props);
 
-function makeCrate(x,z,s=1){
-  const g = new THREE.BoxGeometry(1.2*s, 1.2*s, 1.2*s);
-  const m = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.8 });
-  const b = new THREE.Mesh(g,m);
-  b.position.set(x, 0.6*s, z);
-  b.castShadow = true;
-  b.receiveShadow = true;
-  props.add(b);
-}
+const crateTex = makeCanvasTexture((ctx, s)=>{
+  // a "bushy" camo-ish texture for crates/boxes
+  ctx.fillStyle = '#1b2b1e';
+  ctx.fillRect(0,0,s,s);
+  for (let i=0;i<9000;i++){
+    const x = (Math.random()*s)|0;
+    const y = (Math.random()*s)|0;
+    const r = 20 + (Math.random()*25)|0;
+    const g = 55 + (Math.random()*85)|0;
+    const b = 20 + (Math.random()*30)|0;
+    const a = 0.14 + Math.random()*0.28;
+    ctx.fillStyle = `rgba(${r},${g},${b},${a})`;
+    ctx.fillRect(x,y,1,1);
+  }
+  // faint "woven" lines
+  ctx.globalAlpha = 0.12;
+  ctx.strokeStyle = '#0f1c12';
+  for (let y=0;y<s;y+=12){
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(s,y); ctx.stroke();
+  }
+  for (let x=0;x<s;x+=12){
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,s); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}, 256);
+crateTex.repeat.set(1,1);
 
-for (let i=0;i<24;i++){
-  makeCrate((Math.random()*2-1)*40, (Math.random()*2-1)*40, 0.9+Math.random()*0.7);
+const crateMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0.0, map: crateTex });
+
+function rebuildObstacles(){
+  props.clear();
+  for (const b of (obstacles || [])){
+    const w = Math.max(0.6, b.hx*2);
+    const d = Math.max(0.6, b.hz*2);
+    const h = Math.max(0.8, b.h ?? 1.4);
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), crateMat);
+    mesh.position.set(b.x, h/2, b.z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    props.add(mesh);
+  }
 }
 
 // Arena walls

@@ -17,9 +17,91 @@ const ARENA = { size: 120 }; // square arena, centered at origin
 const PLAYER = { speed: 8.0, radius: 0.45, height: 1.7 };
 const ZOMBIE = { speed: 2.1, radius: 0.55, hpBase: 90 };
 
+// ----- Obstacles (boxes) -----
+// Server-authoritative so players/zombies can't walk through them.
+// Axis-aligned on the XZ plane.
+// { id, x, z, hx, hz, h }
+const OBSTACLES = [];
+
+function mulberry32(seed){
+  let t = seed >>> 0;
+  return function(){
+    t += 0x6D2B79F5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function genObstacles(){
+  OBSTACLES.length = 0;
+  const rnd = mulberry32(0xD011A2B1); // stable seed (just a fun number)
+  const s = ARENA.size/2 - 10;
+  const count = 18;
+  for (let i=0;i<count;i++){
+    const hx = 0.9 + rnd()*1.4;
+    const hz = 0.9 + rnd()*1.4;
+    let x = (rnd()*2-1) * s;
+    let z = (rnd()*2-1) * s;
+    // keep center area clearer
+    if (Math.hypot(x,z) < 12){
+      x += (x<0?-1:1) * 14;
+      z += (z<0?-1:1) * 14;
+    }
+    OBSTACLES.push({ id:`box_${i}`, x, z, hx, hz, h: 1.25 + rnd()*0.85 });
+  }
+}
+
+function parseScriptValue(v){
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : v;
+}
+
+function loadScriptFile(){
+  // Minimal scripting foundation (v0): a tiny line-based script that can spawn entities.
+  // Format examples:
+  //   spawn box x=10 z=5 hx=1.2 hz=1.2 h=1.4
+  //   spawn zombie x=20 z=-20
+  const fs = require('fs');
+  const path = require('path');
+  const scriptPath = path.join(__dirname, 'scripts', 'level1.dzs');
+  if (!fs.existsSync(scriptPath)) return;
+  const txt = fs.readFileSync(scriptPath, 'utf8');
+  const lines = txt.split(/\r?\n/);
+  for (const raw of lines){
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const parts = line.split(/\s+/);
+    if (parts[0] !== 'spawn') continue;
+    const kind = parts[1];
+    const kv = {};
+    for (const p of parts.slice(2)){
+      const [k,v] = p.split('=');
+      if (!k) continue;
+      kv[k] = parseScriptValue(v);
+    }
+    if (kind === 'box'){
+      OBSTACLES.push({
+        id: kv.id || uid(),
+        x: Number(kv.x ?? 0),
+        z: Number(kv.z ?? 0),
+        hx: Number(kv.hx ?? 1.2),
+        hz: Number(kv.hz ?? 1.2),
+        h: Number(kv.h ?? 1.5),
+      });
+    }
+    if (kind === 'zombie'){
+      const hp = ZOMBIE.hpBase + wave*14;
+      const speed = ZOMBIE.speed + wave*0.06;
+      zombies.push({ id: kv.id || uid(), x:Number(kv.x ?? 0), y:0, z:Number(kv.z ?? 0), hp, speed });
+    }
+  }
+}
+
 const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
 const rand = (a,b)=>a+Math.random()*(b-a);
-const uid = ()=>Math.random().toString(36).slice(2,10);
+function uid(){ return Math.random().toString(36).slice(2,10); }
 
 function raySphere(origin, dir, center, radius, maxDist){
   // Ray: o + d*t, t>=0. Returns nearest t within maxDist or null.
@@ -80,6 +162,10 @@ let zombiesSpawned = 0;
 let zombiesKilled = 0;
 let spawnEveryMs = 700;
 let lastSpawnAt = 0;
+
+// Build deterministic obstacles and then allow scripts to add more.
+genObstacles();
+loadScriptFile();
 
 function arenaClamp(p){
   const s = ARENA.size/2 - 1;
@@ -365,6 +451,45 @@ function separateCircles(a, b, ra, rb){
   b.x += nx * push; b.z += nz * push;
 }
 
+function pushCircleOutOfAABB(ent, r, box){
+  const minX = box.x - box.hx, maxX = box.x + box.hx;
+  const minZ = box.z - box.hz, maxZ = box.z + box.hz;
+  const cx = clamp(ent.x, minX, maxX);
+  const cz = clamp(ent.z, minZ, maxZ);
+  let dx = ent.x - cx;
+  let dz = ent.z - cz;
+  const d2 = dx*dx + dz*dz;
+  if (d2 > r*r) return false;
+  // If we're exactly inside (rare but possible), choose a stable push direction
+  if (d2 < 1e-9){
+    const left = Math.abs(ent.x - minX);
+    const right = Math.abs(maxX - ent.x);
+    const back = Math.abs(ent.z - minZ);
+    const front = Math.abs(maxZ - ent.z);
+    const m = Math.min(left, right, back, front);
+    if (m === left) { dx = -1; dz = 0; }
+    else if (m === right) { dx = 1; dz = 0; }
+    else if (m === back) { dx = 0; dz = -1; }
+    else { dx = 0; dz = 1; }
+  }
+  const d = Math.hypot(dx, dz) || 1e-6;
+  const push = (r - d);
+  ent.x += (dx / d) * push;
+  ent.z += (dz / d) * push;
+  return true;
+}
+
+function resolveObstacleCollisionsFor(ent, r){
+  // Iterate a couple of times to deal with corner cases.
+  for (let iter=0; iter<2; iter++){
+    let moved = false;
+    for (const b of OBSTACLES){
+      moved = pushCircleOutOfAABB(ent, r, b) || moved;
+    }
+    if (!moved) break;
+  }
+}
+
 function resolveCollisions(){
   // player-player
   const ps = Array.from(players.values());
@@ -399,6 +524,16 @@ function resolveCollisions(){
       arenaClamp(p);
     }
   }
+
+  // obstacle constraints last so everything ends up in-bounds and not inside boxes
+  for (const p of players.values()){
+    if (p.hp<=0) continue;
+    resolveObstacleCollisionsFor(p, PLAYER.radius);
+    arenaClamp(p);
+  }
+  for (const z of zombies){
+    resolveObstacleCollisionsFor(z, ZOMBIE.radius);
+  }
 }
 function updateZombies(){
   for (const z of zombies){
@@ -409,6 +544,9 @@ function updateZombies(){
     const d = Math.hypot(dx, dz) || 1e-6;
     z.x += (dx/d) * z.speed * DT;
     z.z += (dz/d) * z.speed * DT;
+
+    // obstacle collision
+    resolveObstacleCollisionsFor(z, ZOMBIE.radius);
 
     // attack if close
     const dist = Math.hypot(target.x - z.x, target.z - z.z);
@@ -478,6 +616,7 @@ wss.on("connection", (ws) => {
     type:"welcome",
     id,
     arena: ARENA,
+    obstacles: OBSTACLES,
     weapons: WEAPONS,
     lists: { primary: PRIMARY_LIST, pistols: PISTOL_LIST },
     round: { between: betweenRounds, wave, zombiesTarget }
@@ -616,6 +755,8 @@ function integratePlayers(){
       vx /= mag; vz /= mag;
       p.x += vx * p.speed * DT;
       p.z += vz * p.speed * DT;
+      arenaClamp(p);
+      resolveObstacleCollisionsFor(p, PLAYER.radius);
       arenaClamp(p);
     }
 

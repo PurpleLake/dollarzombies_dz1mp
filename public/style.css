@@ -211,6 +211,18 @@ html, body { margin:0; height:100%; overflow:hidden; background:#050811; }
 .devStat .k{ font-size: 11px; opacity: .65; }
 .devStat .v{ font-weight: 950; margin-top: 4px; }
 
+.devMono{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  opacity: .85;
+  padding: 10px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(0,0,0,0.20);
+  margin-bottom: 10px;
+  user-select: text;
+}
+
 @media (max-width: 920px){
   .dev{ right: 14px; left: 14px; width: auto; }
   .devGrid{ grid-template-columns: 1fr; }

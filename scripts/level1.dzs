@@ -1,0 +1,15 @@
+# Dollar Zombies Script v0 (.dzs)
+# Lines are simple commands. Server reads this file ON STARTUP.
+#
+# Examples:
+#   spawn box x=10 z=5 hx=1.2 hz=1.2 h=1.4
+#   spawn zombie x=20 z=-20
+#
+# Tip: Open Dev Menu (`) and use “Copy: spawn … here” buttons.
+
+# A couple of extra crates for testing
+spawn box x=8 z=14 hx=1.4 hz=1.0 h=1.6
+spawn box x=-16 z=6 hx=1.2 hz=1.2 h=1.4
+
+# A zombie spawn (optional)
+# spawn zombie x=24 z=24
