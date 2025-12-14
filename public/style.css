@@ -227,3 +227,42 @@ html, body { margin:0; height:100%; overflow:hidden; background:#050811; }
   .dev{ right: 14px; left: 14px; width: auto; }
   .devGrid{ grid-template-columns: 1fr; }
 }
+
+
+/* Dev Popup (Weapons/Players/Entities) */
+.devPopup.hidden{ display:none; }
+.devPopup{ position:fixed; inset:0; z-index:50; }
+.devPopupOverlay{ position:absolute; inset:0; background:rgba(0,0,0,0.55); backdrop-filter: blur(6px); }
+.devPopupCard{
+  position:absolute;
+  left:50%; top:50%;
+  transform:translate(-50%,-50%);
+  width:min(860px, calc(100vw - 24px));
+  max-height: min(80vh, 720px);
+  overflow:hidden;
+  border-radius:16px;
+  border:1px solid rgba(255,255,255,0.12);
+  background:rgba(10,12,18,0.94);
+  box-shadow: 0 18px 70px rgba(0,0,0,0.55);
+}
+.devPopupTop{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 12px;
+  border-bottom:1px solid rgba(255,255,255,0.10);
+}
+.devPopupTitle{ font-weight:700; letter-spacing:0.2px; }
+.devPopupBody{
+  padding:12px;
+  overflow:auto;
+}
+.devList{ display:flex; flex-direction:column; gap:8px; }
+.devRow{ display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:10px 10px; border-radius:12px;
+  border:1px solid rgba(255,255,255,0.10);
+  background:rgba(255,255,255,0.04);
+}
+.devRowLeft{ opacity:0.95; }
+.devRowRight{ display:flex; align-items:center; gap:10px; }
+.devToggle{ display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; }
+.devToggle input{ width:16px; height:16px; }
+.devHint{ margin-top:10px; opacity:0.7; font-size:12px; }

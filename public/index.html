@@ -4,7 +4,18 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
   <title>$1 Zombies FPS (Multiplayer) v2</title>
+  <link rel="icon" href="/favicon.ico" />
   <link rel="stylesheet" href="style.css"/>
+
+  <!-- Import map so Three.js example modules (GLTFLoader, etc.) can resolve the bare "three" specifier. -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+      }
+    }
+  </script>
 </head>
 <body>
   <div id="wrap">
