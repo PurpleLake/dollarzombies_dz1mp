@@ -21,6 +21,7 @@
   <div id="wrap">
     <canvas id="three"></canvas>
     <canvas id="fx"></canvas>
+    <canvas id="scriptHud"></canvas>
 
     <div id="hud">
       <div class="top">
@@ -85,6 +86,17 @@
               </div>
               <button id="btnReady" class="btn primary wide">Start Next Wave</button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="panelPause" class="panel hidden">
+        <div class="panelTitle">Paused</div>
+        <div class="panelBody">
+          <p>Game paused. Click <b>Resume</b> (or press <b>Esc</b>) to continue.</p>
+          <div class="row" style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button id="btnResume" class="btn primary">Resume</button>
+            <button id="btnLeave" class="btn">Leave Match</button>
           </div>
         </div>
       </div>

@@ -20,8 +20,12 @@ startServer({
     { urlPrefix: '/game/', dir: gameDir },
   ],
   onConnection: (ws, ctx) => {
+    try { console.log('[ws] client connected'); } catch {}
     if (!zm){
-      zm = createZMServer({ clients: ctx.clients });
+      // IMPORTANT: The game must run without any external script files.
+      // We only load .dzs scripts when explicitly enabled.
+      zm = createZMServer({ clients: ctx.clients, skipDefaultScript: true });
+      try { console.log('[game] ZM server created'); } catch {}
     }
     zm.handleConnection(ws);
   }

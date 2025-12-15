@@ -28,7 +28,10 @@ function mimeType(filePath){
 
 function safeJoin(base, reqPath){
   const p = decodeURIComponent(reqPath.split('?')[0]);
-  const clean = p.replace(/\\/g, '/');
+  // IMPORTANT: URLs typically start with '/'. In Node, `path.join(base, '/x')`
+  // discards `base` because '/x' is treated as absolute. Strip leading slashes
+  // so static mounts work for '/', '/engine/', '/game/', etc.
+  const clean = p.replace(/\\/g, '/').replace(/^\/+/, '');
   const joined = path.join(base, clean);
   if (!joined.startsWith(base)) return null;
   return joined;

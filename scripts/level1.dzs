@@ -1,7 +1,7 @@
 # Dollar Zombies Script v1 (.dzs)
 # Server reads this file ON STARTUP.
 # Supported:
-#   - spawn box|zombie|weapon ...
+#   - spawn bush|zombie|weapon ...
 #   - let/set + assignments
 #   - if (condition) { ... } else { ... }
 #   - for (init; condition; step) { ... }
@@ -10,8 +10,8 @@
 # Tip: Open Dev Menu (`) to copy spawn lines + your coordinates.
 
 # A couple of extra crates for testing
-spawn box x=8 z=14 hx=1.4 hz=1.0 h=1.6
-spawn box x=-16 z=6 hx=1.2 hz=1.2 h=1.4
+spawn bush x=8 z=14 hx=1.4 hz=1.0 h=1.6
+spawn bush x=-16 z=6 hx=1.2 hz=1.2 h=1.4
 
 # Weapon pickups (spawnable + scriptable)
 spawn weapon weapon=glock x=2 z=6
@@ -20,7 +20,7 @@ spawn weapon weapon=ar_full x=-4 z=6
 # A loop example: make a small "wall" of crates
 let n = 5
 for (i=0; i<n; i=i+1) {
-  spawn box x=${-12+i*3} z=-10 hx=1.2 hz=1.2 h=1.4
+  spawn bush x=${-12+i*3} z=-10 hx=1.2 hz=1.2 h=1.4
 }
 
 # Conditional example

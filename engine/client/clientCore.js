@@ -1,9 +1,16 @@
-import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js";
+// IMPORTANT: load Three.js with a top-level await so we can surface failures
+// on-screen (some environments block CDNs, which would otherwise look like a silent hang).
+let THREE = null;
+try {
+  THREE = await import("https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js");
+} catch (e) {
+  // We don't throw here so the UI + WS can still boot and show a readable error.
+  console.error("Three.js failed to load", e);
+}
+import { initDevMenu } from "./dev/devMenu.js";
 
-// NOTE: We intentionally do NOT rely on GLTFLoader here.
-// In many local/dev setups, external module imports (and import maps) can be flaky.
-// To keep zombies reliable, we always render the built-in procedural low-poly zombie.
-// (The included /public/models/zombie.gltf can be re-enabled later once you bundle loaders.)
+// We try to use a real low-poly zombie model (glTF). If it fails to load for any reason,
+// we fall back to the built-in procedural zombie so the game still works.
 let GLTFLoader = null;
 
 const $ = (id)=>document.getElementById(id);
@@ -19,6 +26,9 @@ const ui = {
   toast: $("toast"),
   btnPlay: $("btnPlay"),
   btnPause: $("btnPause"),
+  panelPause: $("panelPause"),
+  btnResume: $("btnResume"),
+  btnLeave: $("btnLeave"),
   panelStart: $("panelStart"),
   panelRound: $("panelRound"),
   primaryList: $("primaryList"),
@@ -29,6 +39,94 @@ const ui = {
   devBody: $("devBody"),
   btnDevClose: $("btnDevClose"),
 };
+
+// On-screen debug overlay (so you can diagnose startup even when DevTools isn't open).
+const dbg = (()=>{
+  const el = document.createElement('div');
+  el.id = 'dbg';
+  el.style.position = 'fixed';
+  el.style.left = '10px';
+  el.style.bottom = '10px';
+  el.style.maxWidth = 'min(520px, 95vw)';
+  el.style.maxHeight = '45vh';
+  el.style.overflow = 'auto';
+  el.style.padding = '10px 12px';
+  el.style.font = '12px/1.35 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+  el.style.background = 'rgba(0,0,0,0.6)';
+  el.style.color = '#fff';
+  el.style.border = '1px solid rgba(255,255,255,0.18)';
+  el.style.borderRadius = '10px';
+  el.style.zIndex = '9999';
+  el.style.pointerEvents = 'none';
+  el.textContent = 'boot: starting…\n';
+  document.body.appendChild(el);
+  const lines = [];
+  const log = (msg)=>{
+    lines.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
+    while (lines.length > 20) lines.shift();
+    el.textContent = lines.join('\n');
+  };
+  return { el, log };
+})();
+
+// Debug UI visibility can be toggled from the Dev Menu.
+let debugVisible = true;
+function setDebugVisible(v){
+  debugVisible = !!v;
+  dbg.el.style.display = debugVisible ? 'block' : 'none';
+}
+function isDebugVisible(){ return debugVisible; }
+
+window.addEventListener('error', (e)=>{
+  dbg.log(`ERROR: ${e.message}`);
+  try { ui.status.textContent = `Error: ${e.message}`; } catch {}
+});
+window.addEventListener('unhandledrejection', (e)=>{
+  dbg.log(`PROMISE: ${e.reason?.message || e.reason}`);
+  try { ui.status.textContent = `Error: ${e.reason?.message || e.reason}`; } catch {}
+});
+
+if (!THREE){
+  // Surface the root issue directly in the UI.
+  dbg.log('boot: Three.js FAILED to load (CDN blocked/offline?)');
+  try {
+    ui.status.textContent = 'Three.js failed to load. Check internet/CDN access (cdn.jsdelivr.net).';
+    if (ui.btnPlay) ui.btnPlay.disabled = true;
+    if (ui.panelStart){
+      const b = ui.panelStart.querySelector('.panelBody');
+      if (b){
+        const note = document.createElement('div');
+        note.style.marginTop = '10px';
+        note.style.opacity = '0.95';
+        note.innerHTML = '<b>Render engine missing.</b> The game cannot start because Three.js failed to load. If you are offline or your network blocks CDNs, the client will appear to hang.';
+        b.appendChild(note);
+      }
+    }
+  } catch {}
+}
+
+function relockPointerSoon(){
+  // Pointer lock can only be requested from a user gesture in some browsers.
+  // We call this from click handlers (Resume/Close/etc.) and also schedule a
+  // micro-delay so DOM changes settle.
+  try {
+    setTimeout(()=>{
+      if (!renderer?.domElement) return;
+      if (paused) return;
+      if (!ui.panelStart?.classList.contains('hidden')) return;
+      if (!ui.panelRound?.classList.contains('hidden')) return;
+      if (!ui.panelPause?.classList.contains('hidden')) return;
+      if (!ui.devMenu?.classList.contains('hidden')) return;
+      const popup = document.getElementById('devPopup');
+      if (popup && !popup.classList.contains('hidden')) return;
+      renderer.domElement.requestPointerLock();
+    }, 25);
+  } catch (e) {}
+}
+
+function unlockPointer(){
+  try { document.exitPointerLock?.(); } catch (e) {}
+}
 
 function toast(msg){
   ui.toast.textContent = msg;
@@ -71,8 +169,16 @@ function rebuildLists(){
     btn.addEventListener("click", () => {
       if (!canPick) return;
       if (!ws || ws.readyState !== 1) return;
-      if (slot === "primary") ws.send(JSON.stringify({ type: "pickPrimary", weapon: wid }));
-      else ws.send(JSON.stringify({ type: "pickPistol", weapon: wid }));
+      if (slot === "primary"){
+        // Selecting a primary should immediately reflect in the HUD.
+        state.activeSlot = "primary";
+        ws.send(JSON.stringify({ type: "pickPrimary", weapon: wid }));
+        updateHUD();
+      } else {
+        state.activeSlot = "pistol";
+        ws.send(JSON.stringify({ type: "pickPistol", weapon: wid }));
+        updateHUD();
+      }
     });
 
     return btn;
@@ -112,11 +218,25 @@ const wsProto = (location.protocol === "https:") ? "wss" : "ws";
 if (!location.host){
   ui.status.textContent = "No server detected. Run: node server.js then open http://localhost:3000";
 }
+let bootReady = false;
+const pendingMsgs = [];
+
 const ws = new WebSocket(`${wsProto}://${location.host}/ws`);
-ws.addEventListener("open", ()=> ui.status.textContent = "Connected. Click Play.");
-ws.addEventListener("close", ()=> ui.status.textContent = "Disconnected." );
-ws.addEventListener("error", ()=> ui.status.textContent = "Connection error. Is server.js running?" );
+ws.addEventListener("open", ()=>{
+  ui.status.textContent = "Connected. Click Play.";
+  dbg.log('ws: open');
+});
+ws.addEventListener("close", ()=>{
+  ui.status.textContent = "Disconnected.";
+  dbg.log('ws: close');
+});
+ws.addEventListener("error", ()=>{
+  ui.status.textContent = "Connection error. Is server.js running?";
+  dbg.log('ws: error');
+});
 ws.addEventListener("message", (e)=> onMsg(JSON.parse(e.data)));
+
+dbg.log('boot: ws created');
 
 const state = {
   players: new Map(), // id -> snapshot
@@ -131,7 +251,11 @@ const state = {
   nextClientFireAt: 0,
 };
 
+// Script HUD items streamed by server (custom scripts)
+let scriptHudItems = [];
+
 function onMsg(msg){
+  if (!bootReady) { pendingMsgs.push(msg); return; }
   if (msg.type === "welcome"){
     myId = msg.id;
     arena = msg.arena;
@@ -163,6 +287,12 @@ function onMsg(msg){
     const mesh = otherMeshes.get(msg.id);
     if (mesh){ scene.remove(mesh); otherMeshes.delete(msg.id); }
   }
+
+  if (msg.type === "dzsHelp"){
+    state.dzsHelp = msg.help;
+    // If the DZS help popup is open, refresh it so new data appears.
+    try{ devUI?.refreshDevPopup?.(); }catch(_e){}
+  }
   if (msg.type === "round"){
     round.between = msg.between;
     round.wave = msg.wave;
@@ -170,6 +300,19 @@ function onMsg(msg){
     setRoundUI(round.between);
     rebuildLists();
     toast(round.between ? "Round cleared. Pick your loadout." : `Wave ${round.wave} started.`);
+  }
+
+  // Hard reset from server (used for match restart). Clears any stuck input so you don't moon-walk.
+  if (msg.type === "restartAck"){
+    state.keys = { w:false, a:false, s:false, d:false };
+    state.mouseDown = false;
+    state.nextClientFireAt = 0;
+    state.yaw = 0;
+    state.pitch = 0;
+    paused = false;
+    setPauseUI(false);
+    unlockPointer();
+    toast("Restarted. Pick your loadout.");
   }
   if (msg.type === "pickDenied"){
     toast(msg.reason || "Pick denied.");
@@ -186,15 +329,25 @@ function onMsg(msg){
     syncPickups();
     updateHUD();
   }
+
+  if (msg.type === "hud"){
+    scriptHudItems = Array.isArray(msg.items) ? msg.items : [];
+  }
   if (msg.type === "loadout"){
     const p = state.players.get(msg.id);
     if (p){
       if (msg.pistol) p.pistol = msg.pistol;
       if (msg.primary) p.primary = msg.primary;
+      if (msg.inventory) p.inventory = msg.inventory;
       if (msg.cash != null) p.cash = msg.cash;
+      if (msg.hp != null) p.hp = msg.hp;
       state.players.set(msg.id, p);
     }
     if (msg.id === myId) rebuildLists();
+    if (msg.id === myId){
+      // Ensure weapon pill updates immediately when the server accepts a pick.
+      updateHUD();
+    }
   }
   if (msg.type === "reload"){
     if (msg.id === myId) toast("Reloading…");
@@ -217,6 +370,17 @@ function onMsg(msg){
   }
   if (msg.type === "pdown"){
     if (msg.id === myId) toast("Down!");
+  }
+
+  if (msg.type === "playerDead"){
+    if (msg.id === myId){
+      // Default behavior: prompt a restart.
+      setPauseUI(true);
+      const ok = window.confirm(msg.msg || "You died. Restart?");
+      if (ok && ws && ws.readyState === 1){
+        ws.send(JSON.stringify({ type: "restart" }));
+      }
+    }
   }
 
   if (msg.type === "zhit" || msg.type === "zdead"){
@@ -248,6 +412,12 @@ function onMsg(msg){
 
 function setRoundUI(between){
   ui.panelRound.classList.toggle("hidden", !between);
+  if (between){
+    // Need cursor for gun selection.
+    unlockPointer();
+  } else {
+    relockPointerSoon();
+  }
 }
 
 function weaponLabel(id){
@@ -258,243 +428,71 @@ function weaponLabel(id){
 }
 
 
-function ensureDevPopup(){
-  let el = document.getElementById("devPopup");
-  if (el) return el;
-  el = document.createElement("div");
-  el.id = "devPopup";
-  el.className = "devPopup hidden";
-  el.innerHTML = `
-    <div class="devPopupOverlay"></div>
-    <div class="devPopupCard">
-      <div class="devPopupTop">
-        <div class="devPopupTitle" id="devPopupTitle">Dev</div>
-        <button class="btn" id="devPopupClose">Close</button>
-      </div>
-      <div class="devPopupBody" id="devPopupBody"></div>
-    </div>
-  `;
-  document.body.appendChild(el);
-  el.querySelector("#devPopupClose").onclick = ()=> closeDevPopup();
-  el.querySelector(".devPopupOverlay").onclick = ()=> closeDevPopup();
-  return el;
-}
+// Dev menu / popup lives in engine/client/dev/devMenu.js
+const devUI = initDevMenu({
+  ui,
+  getWs: ()=>ws,
+  toast,
+  state,
+  getMyId: ()=>myId,
+  getWeapons: ()=>weapons,
+  setDebugVisible,
+  isDebugVisible,
+  unlockPointer,
+  relockPointerSoon,
+});
 
-let devPopupMode = null;
-
-function openDevPopup(mode){
-  devPopupMode = mode;
-  const el = ensureDevPopup();
-  el.classList.remove("hidden");
-  renderDevPopup();
+function toggleDevMenu(force){
+  return devUI.toggleDevMenu(force);
 }
 function closeDevPopup(){
-  const el = ensureDevPopup();
-  el.classList.add("hidden");
-  devPopupMode = null;
+  return devUI.closeDevPopup();
 }
-
-function weaponCategory(id, w){
-  if (!w) return "Other";
-  if (w.slot === "pistol") return "Pistols";
-  if ((w.pellets||1) > 1 || String(id).includes("shotgun")) return "Shotguns";
-  if (String(id).includes("mg") || String(id).includes("mg42") || /MG/i.test(w.name||"")) return "Light Machine Guns";
-  if (String(id).includes("dmr")) return "DMR";
-  return "Assault Rifles";
-}
-
-function renderDevMenu(){
-  if (!ui.devBody) return;
-  ui.devBody.innerHTML = "";
-
-  const section = (title)=>{
-    const s = document.createElement("div");
-    s.className = "devSection";
-    const h = document.createElement("div");
-    h.className = "h";
-    h.textContent = title;
-    s.appendChild(h);
-    return s;
-  };
-
-  const bigBtn = (label, onClick)=>{
-    const b = document.createElement("button");
-    b.className = "btn wide";
-    b.textContent = label;
-    b.onclick = onClick;
-    return b;
-  };
-
-  const s = section("DEV MENU");
-  s.appendChild(bigBtn("Weapons", ()=> openDevPopup("weapons")));
-  s.appendChild(bigBtn("Placeholder", ()=> toast("Placeholder (coming soon)")));
-  s.appendChild(bigBtn("Placeholder", ()=> toast("Placeholder (coming soon)")));
-  s.appendChild(bigBtn("Placeholder", ()=> toast("Placeholder (coming soon)")));
-  s.appendChild(bigBtn("Players", ()=> openDevPopup("players")));
-  s.appendChild(bigBtn("Entities", ()=> openDevPopup("entities")));
-  ui.devBody.appendChild(s);
-}
-
-function renderDevPopup(){
-  const el = ensureDevPopup();
-  const titleEl = el.querySelector("#devPopupTitle");
-  const bodyEl = el.querySelector("#devPopupBody");
-  if (!titleEl || !bodyEl) return;
-  bodyEl.innerHTML = "";
-
-  const mkSection = (t)=>{
-    const wrap = document.createElement("div");
-    wrap.className = "devSection";
-    const h = document.createElement("div");
-    h.className = "h";
-    h.textContent = t;
-    wrap.appendChild(h);
-    bodyEl.appendChild(wrap);
-    return wrap;
-  };
-
-  const me = state.players.get(myId);
-
-  if (devPopupMode === "weapons"){
-    titleEl.textContent = "Weapons";
-    const cats = new Map();
-    for (const [id, w] of Object.entries(weapons || {})){
-      const c = weaponCategory(id, w);
-      if (!cats.has(c)) cats.set(c, []);
-      cats.get(c).push({ id, w });
-    }
-    const order = ["Pistols","Shotguns","Assault Rifles","Light Machine Guns","DMR","Other"];
-    for (const c of order){
-      const items = cats.get(c);
-      if (!items || !items.length) continue;
-      items.sort((a,b)=> (a.w.name||a.id).localeCompare(b.w.name||b.id));
-      const sec = mkSection(c);
-      const grid = document.createElement("div");
-      grid.className = "devGrid";
-      for (const it of items){
-        const b = document.createElement("button");
-        b.className = "btn";
-        const dmg = `${Math.round(it.w.dmgClose||0)}→${Math.round(it.w.dmgFar||0)}`;
-        b.textContent = `${it.w.name || it.id}  (DMG ${dmg}, R ${it.w.range||0}, MAG ${it.w.mag||0})`;
-        b.onclick = ()=>{
-          ws?.send(JSON.stringify({ type:"devEquipWeapon", weapon: it.id }));
-          toast(`Equipped ${it.w.name || it.id}`);
-          closeDevPopup();
-        };
-        grid.appendChild(b);
-      }
-      sec.appendChild(grid);
-    }
-    // also show quick help
-    const hint = document.createElement("div");
-    hint.className = "devHint";
-    hint.textContent = "Click a weapon to equip instantly. (Mid-round enabled for dev.)";
-    bodyEl.appendChild(hint);
-    return;
-  }
-
-  if (devPopupMode === "players"){
-    titleEl.textContent = "Players";
-    const sec = mkSection("Players");
-    const list = document.createElement("div");
-    list.className = "devList";
-    const arr = Array.from(state.players.values()).slice().sort((a,b)=> (a.name||a.id).localeCompare(b.name||b.id));
-    for (const p of arr){
-      const rowEl = document.createElement("div");
-      rowEl.className = "devRow";
-      const left = document.createElement("div");
-      left.className = "devRowLeft";
-      left.textContent = `${p.name || p.id}  (HP ${Math.round(p.hp||0)}  $${Math.round(p.cash||0)})`;
-      const right = document.createElement("div");
-      right.className = "devRowRight";
-      const lbl = document.createElement("label");
-      lbl.className = "devToggle";
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.checked = !!p.godMode;
-      cb.onchange = ()=>{
-        ws?.send(JSON.stringify({ type:"devSetGodMode", targetId: p.id, enabled: cb.checked }));
-        toast(`${p.name || p.id}: god mode ${cb.checked ? "ON" : "OFF"}`);
-      };
-      const span = document.createElement("span");
-      span.textContent = "God";
-      lbl.appendChild(cb);
-      lbl.appendChild(span);
-      right.appendChild(lbl);
-      rowEl.appendChild(left);
-      rowEl.appendChild(right);
-      list.appendChild(rowEl);
-    }
-    sec.appendChild(list);
-    return;
-  }
-
-  if (devPopupMode === "entities"){
-    titleEl.textContent = "Entities";
-    const sec = mkSection("Zombies");
-    const list = document.createElement("div");
-    list.className = "devList";
-    const zs = Array.from(state.zombies.values()).slice().sort((a,b)=> (a.id||"").localeCompare(b.id||""));
-    if (!zs.length){
-      const d = document.createElement("div");
-      d.className = "devHint";
-      d.textContent = "No zombies alive right now.";
-      sec.appendChild(d);
-      return;
-    }
-    for (const z of zs){
-      const b = document.createElement("button");
-      b.className = "btn wide";
-      b.textContent = `Zombie ${String(z.id).slice(0,6)}  (HP ${Math.max(0, Math.round(z.hp||0))})`;
-      b.onclick = ()=>{
-        ws?.send(JSON.stringify({ type:"devTeleportZombieToPlayer", zid: z.id, targetId: myId }));
-        toast("Zombie teleported to you.");
-        closeDevPopup();
-      };
-      list.appendChild(b);
-    }
-    sec.appendChild(list);
-    const hint = document.createElement("div");
-    hint.className = "devHint";
-    hint.textContent = "Click a zombie to teleport it to your position.";
-    bodyEl.appendChild(hint);
-    return;
-  }
-
-  titleEl.textContent = "Dev";
-  const hint = document.createElement("div");
-  hint.className = "devHint";
-  hint.textContent = "Select a section from the Dev Menu.";
-  bodyEl.appendChild(hint);
-}
-function toggleDevMenu(force){
-  const show = (force != null) ? !!force : ui.devMenu.classList.contains("hidden");
-  ui.devMenu.classList.toggle("hidden", !show);
-  if (show){
-    renderDevMenu();
-    clearInterval(toggleDevMenu._t);
-    toggleDevMenu._t = setInterval(()=>{
-      if (ui.devMenu.classList.contains('hidden')) return;
-      renderDevMenu();
-    }, 450);
-  } else {
-    clearInterval(toggleDevMenu._t);
-  }
-}
-
-ui.btnDev?.addEventListener("click", ()=> toggleDevMenu());
-ui.btnDevClose?.addEventListener("click", ()=> toggleDevMenu(false));
-addEventListener("keydown", (e)=>{
-  if (e.code === "Backquote"){
-    e.preventDefault();
-    toggleDevMenu();
-  }
-});
 
 ui.btnPlay.onclick = () => {
   ui.panelStart.classList.add("hidden");
   renderer.domElement.requestPointerLock();
 };
+
+function setPauseUI(show){
+  if (!ui.panelPause) return;
+  ui.panelPause.classList.toggle('hidden', !show);
+  if (show) unlockPointer();
+  else relockPointerSoon();
+}
+
+function togglePause(force){
+  const next = (force != null) ? !!force : !paused;
+  paused = next;
+  setPauseUI(paused);
+}
+
+ui.btnPause && (ui.btnPause.onclick = ()=> togglePause());
+ui.btnResume && (ui.btnResume.onclick = ()=> togglePause(false));
+ui.btnLeave && (ui.btnLeave.onclick = ()=> {
+  // Soft leave: show start panel again. (Server keeps you connected.)
+  paused = false;
+  setPauseUI(false);
+  ui.panelStart?.classList.remove('hidden');
+  unlockPointer();
+  toast('Left match');
+});
+
+window.addEventListener('keydown', (e)=>{
+  if (e.code === 'Escape'){
+    // Let Escape toggle pause regardless of pointer lock state.
+    e.preventDefault();
+    // Don't pause if start screen is up.
+    if (!ui.panelStart?.classList.contains('hidden')) return;
+    // If round menu open, Escape simply re-locks once it closes; we keep menu open.
+    if (round?.between) return;
+    // If dev menu open, close it first.
+    if (ui.devMenu && !ui.devMenu.classList.contains('hidden')){ toggleDevMenu(false); return; }
+    const popup = document.getElementById('devPopup');
+    if (popup && !popup.classList.contains('hidden')){ closeDevPopup(); return; }
+    togglePause();
+  }
+}, { passive:false });
 // Start next wave (between-rounds). Server only honors this when `betweenRounds` is true.
 ui.btnReady && (ui.btnReady.onclick = () => {
   if (!ws || ws.readyState !== 1){
@@ -508,21 +506,36 @@ ui.btnReady && (ui.btnReady.onclick = () => {
 
 
 // Input
-addEventListener("keydown", (e)=>{
+// Use window listeners (explicit) and prevent browser defaults so WASD never gets eaten by focus/scroll.
+function isTypingTarget(t){
+  const tag = (t && t.tagName) ? String(t.tagName).toUpperCase() : "";
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+}
+window.addEventListener("keydown", (e)=>{
+  if (isTypingTarget(e.target)) return;
+  if (["KeyW","KeyA","KeyS","KeyD","Space"].includes(e.code)) e.preventDefault();
   if (e.code==="KeyW") state.keys.w = true;
   if (e.code==="KeyA") state.keys.a = true;
   if (e.code==="KeyS") state.keys.s = true;
   if (e.code==="KeyD") state.keys.d = true;
   if (e.code==="Digit1") state.activeSlot = "pistol";
   if (e.code==="Digit2") state.activeSlot = "primary";
+  if (e.code==="Digit3") state.activeSlot = "launcher";
+  if (e.code==="KeyQ"){
+    // Use medkit
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type:"useMedkit" }));
+  }
   if (e.code==="KeyR") sendReload();
-});
-addEventListener("keyup", (e)=>{
+  updateHUD();
+}, { passive:false });
+
+window.addEventListener("keyup", (e)=>{
+  if (isTypingTarget(e.target)) return;
   if (e.code==="KeyW") state.keys.w = false;
   if (e.code==="KeyA") state.keys.a = false;
   if (e.code==="KeyS") state.keys.s = false;
   if (e.code==="KeyD") state.keys.d = false;
-});
+}, { passive:true });
 
 let pendingShoot = false;
 addEventListener("mousedown", ()=> {
@@ -545,11 +558,22 @@ document.addEventListener("mousemove", (e)=>{
 
 // Three.js
 const canvas = document.getElementById("three");
+const scriptHudCanvas = document.getElementById("scriptHud");
+const scriptHudCtx = scriptHudCanvas ? scriptHudCanvas.getContext('2d') : null;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+// Script HUD canvas (2D overlay) setup
+if (scriptHudCanvas){
+  scriptHudCanvas.width = Math.floor(innerWidth * (devicePixelRatio || 1));
+  scriptHudCanvas.height = Math.floor(innerHeight * (devicePixelRatio || 1));
+  scriptHudCanvas.style.width = innerWidth + 'px';
+  scriptHudCanvas.style.height = innerHeight + 'px';
+  if (scriptHudCtx) scriptHudCtx.setTransform(devicePixelRatio || 1, 0, 0, devicePixelRatio || 1, 0, 0);
+}
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050811);
@@ -793,10 +817,90 @@ function buildArena(){
 const otherMeshes = new Map();
 const zombieMeshes = new Map();
 
-// Zombie model (glTF) is included in /public/models/zombie.gltf, but we keep
-// rendering procedural zombies by default for reliability. If you want to
-// re-enable glTF later, bundle GLTFLoader locally and add an import map.
+// Zombie model (glTF) is shipped with the Zombies module so it isn't tied to
+// the top-level public folder:
+//   /game/zm/zombies/resources/models/zombie.gltf
+// If it fails to load for any reason, we fall back to a built-in procedural
+// zombie model so gameplay still works.
 let zombiePrefab = null;
+let zombiePrefabClone = null;
+
+async function ensureGLTFLoader(){
+  if (GLTFLoader) return GLTFLoader;
+  try {
+    const mod = await import('three/addons/loaders/GLTFLoader.js');
+    GLTFLoader = mod.GLTFLoader;
+    return GLTFLoader;
+  } catch (e){
+    console.warn('[client] GLTFLoader import failed, using procedural zombies:', e?.message || e);
+    return null;
+  }
+}
+
+async function loadZombiePrefab(){
+  if (zombiePrefab) return;
+  const L = await ensureGLTFLoader();
+  if (!L){
+    dbg.log('zombie: GLTFLoader unavailable, using procedural model');
+    return;
+  }
+  try {
+    const loader = new L();
+    const gltf = await new Promise((resolve, reject)=>{
+      // NOTE: served by server.js via the /game/ static mount.
+      loader.load('/game/zm/zombies/resources/models/zombie.gltf', resolve, undefined, reject);
+    });
+    const prefab = gltf.scene || (gltf.scenes && gltf.scenes[0]);
+    if (!prefab) throw new Error('GLTF had no scene');
+    prefab.traverse?.((o)=>{
+      if (o.isMesh){
+        o.castShadow = true;
+        o.receiveShadow = true;
+      }
+    });
+    // Normalize size/position so it reliably appears at human scale.
+    try {
+      const box = new THREE.Box3().setFromObject(prefab);
+      const size = new THREE.Vector3();
+      const center = new THREE.Vector3();
+      box.getSize(size);
+      box.getCenter(center);
+      // Avoid divide-by-zero; target roughly ~1.8m tall.
+      const h = Math.max(0.001, size.y || 0.001);
+      const s = 1.8 / h;
+      prefab.scale.set(s, s, s);
+      // Recompute after scaling, then move so feet sit on y=0 and model is centered.
+      const box2 = new THREE.Box3().setFromObject(prefab);
+      const min = box2.min.clone();
+      const c2 = new THREE.Vector3();
+      box2.getCenter(c2);
+      prefab.position.x += -c2.x;
+      prefab.position.z += -c2.z;
+      prefab.position.y += -min.y;
+    } catch (e) {
+      // If normalization fails, keep whatever the author shipped.
+      prefab.scale.set(1,1,1);
+    }
+    zombiePrefab = prefab;
+    // Some glTF zombies are skinned. A plain .clone(true) can produce invisible
+    // meshes (skeleton not wired). If we detect a skinned mesh, use SkeletonUtils.
+    zombiePrefabClone = () => zombiePrefab.clone(true);
+    try {
+      let hasSkinned = false;
+      zombiePrefab.traverse?.((o)=>{ if (o.isSkinnedMesh) hasSkinned = true; });
+      if (hasSkinned){
+        const util = await import('three/addons/utils/SkeletonUtils.js');
+        if (util?.clone) zombiePrefabClone = () => util.clone(zombiePrefab);
+      }
+    } catch (e){ /* keep default clone */ }
+    console.log('[client] Zombie model loaded (gltf).');
+    dbg.log('zombie model: loaded ✅ (gltf)');
+  } catch (e){
+    const msg = e?.message || String(e);
+    console.warn('[client] Zombie glTF failed to load, using procedural zombies:', msg);
+    dbg.log(`zombie model: FAILED ❌ (${msg})`);
+  }
+}
 
 function makeOtherMesh(){
   const g = new THREE.CapsuleGeometry(0.35, 1.0, 6, 12);
@@ -808,6 +912,13 @@ function makeOtherMesh(){
 }
 
 function makeZombieMesh(){
+  // Prefer the glTF prefab if available.
+  if (zombiePrefab){
+    const c = (zombiePrefabClone ? zombiePrefabClone() : zombiePrefab.clone(true));
+    // Ensure it stands on the ground.
+    c.position.set(0,0,0);
+    return c;
+  }
   // Procedural low-poly zombie: chunky body/head/legs/arms
   const g = new THREE.Group();
 
@@ -903,6 +1014,14 @@ function updateWorldMeshes(){
       mesh = makeZombieMesh();
       scene.add(mesh);
       zombieMeshes.set(zid, mesh);
+      // Log a light signal for debugging without flooding.
+      if (!updateWorldMeshes._zLogged){
+        updateWorldMeshes._zLogged = 0;
+      }
+      updateWorldMeshes._zLogged++;
+      if (updateWorldMeshes._zLogged <= 5){
+        dbg.log(`zombie: spawn mesh #${updateWorldMeshes._zLogged} (${zombiePrefab ? 'gltf' : 'procedural'})`);
+      }
     }
     mesh.position.set(z.x, 0.0, z.z);
     // subtle idle wobble (by moving parts)
@@ -976,7 +1095,9 @@ function sendShoot(){
   if (!active) return;
   ws.send(JSON.stringify({ type:"shoot", weapon: active.id, aim: { yaw: state.yaw, pitch: state.pitch } }));
   // local recoil + muzzle flash so it's visually "FPS"
-  recoil = Math.min(1, recoil + 0.9);
+  const _wdef = getWeaponDef(active.id);
+  const _rs = (_wdef && typeof _wdef.recoilScale === 'number') ? _wdef.recoilScale : 1;
+  recoil = Math.min(1, recoil + 0.9 * _rs);
   muzzleFlash.material.opacity = 0.85;
 }
 
@@ -1010,9 +1131,69 @@ addEventListener("resize", ()=>{
   renderer.setSize(innerWidth, innerHeight);
   camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
+  if (scriptHudCanvas){
+    scriptHudCanvas.width = Math.floor(innerWidth * (devicePixelRatio || 1));
+    scriptHudCanvas.height = Math.floor(innerHeight * (devicePixelRatio || 1));
+    scriptHudCanvas.style.width = innerWidth + 'px';
+    scriptHudCanvas.style.height = innerHeight + 'px';
+    if (scriptHudCtx) scriptHudCtx.setTransform(devicePixelRatio || 1, 0, 0, devicePixelRatio || 1, 0, 0);
+  }
 });
 
 let last = performance.now();
+
+function drawScriptHud(){
+  if (!scriptHudCtx || !scriptHudCanvas) return;
+  scriptHudCtx.clearRect(0, 0, innerWidth, innerHeight);
+  if (!scriptHudItems || !scriptHudItems.length) return;
+
+  for (const it of scriptHudItems){
+    if (!it || !it.kind) continue;
+    if (it.kind === 'text'){
+      const o = it.opts || {};
+      const x = (Number(it.x) <= 1 && Number(it.x) >= 0) ? Number(it.x) * innerWidth : Number(it.x);
+      const y = (Number(it.y) <= 1 && Number(it.y) >= 0) ? Number(it.y) * innerHeight : Number(it.y);
+      const size = Number(o.size || 18);
+      const font = o.font || 'system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial';
+      scriptHudCtx.font = `${Math.max(8, size)}px ${font}`;
+      scriptHudCtx.textAlign = o.align || 'left';
+      scriptHudCtx.textBaseline = o.baseline || 'top';
+      scriptHudCtx.globalAlpha = (o.alpha != null) ? Number(o.alpha) : 1;
+      if (o.shadow){
+        scriptHudCtx.shadowColor = 'rgba(0,0,0,0.55)';
+        scriptHudCtx.shadowBlur = 8;
+        scriptHudCtx.shadowOffsetX = 1;
+        scriptHudCtx.shadowOffsetY = 2;
+      } else {
+        scriptHudCtx.shadowColor = 'rgba(0,0,0,0)';
+        scriptHudCtx.shadowBlur = 0;
+        scriptHudCtx.shadowOffsetX = 0;
+        scriptHudCtx.shadowOffsetY = 0;
+      }
+      scriptHudCtx.fillStyle = o.color || 'rgba(235,245,255,0.92)';
+      scriptHudCtx.fillText(String(it.text ?? ''), x, y);
+      scriptHudCtx.globalAlpha = 1;
+    }
+    if (it.kind === 'rect'){
+      const o = it.opts || {};
+      const x = (Number(it.x) <= 1 && Number(it.x) >= 0) ? Number(it.x) * innerWidth : Number(it.x);
+      const y = (Number(it.y) <= 1 && Number(it.y) >= 0) ? Number(it.y) * innerHeight : Number(it.y);
+      const w = (Number(it.w) <= 1 && Number(it.w) >= 0) ? Number(it.w) * innerWidth : Number(it.w);
+      const h = (Number(it.h) <= 1 && Number(it.h) >= 0) ? Number(it.h) * innerHeight : Number(it.h);
+      scriptHudCtx.globalAlpha = (o.alpha != null) ? Number(o.alpha) : 1;
+      if (o.fill){
+        scriptHudCtx.fillStyle = o.fill;
+        scriptHudCtx.fillRect(x, y, w, h);
+      }
+      if (o.stroke){
+        scriptHudCtx.strokeStyle = o.stroke;
+        scriptHudCtx.lineWidth = Number(o.lineWidth || 2);
+        scriptHudCtx.strokeRect(x, y, w, h);
+      }
+      scriptHudCtx.globalAlpha = 1;
+    }
+  }
+}
 function frame(){
   const t = performance.now();
   const dt = Math.min(0.033, (t-last)/1000);
@@ -1062,6 +1243,15 @@ function frame(){
   }
 
   renderer.render(scene, camera);
+  drawScriptHud();
   requestAnimationFrame(frame);
 }
+// Kick off model loads (non-blocking). If it fails, we fall back safely.
+
+// Defer processing WS messages until client is fully initialized (prevents TDZ errors).
+bootReady = true;
+while (pendingMsgs.length) onMsg(pendingMsgs.shift());
+
+loadZombiePrefab();
+
 frame();

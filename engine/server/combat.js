@@ -53,15 +53,38 @@ function createCombatSystem(deps){
   const {
     getZombies,
     setZombies,
-    players,
-    weapons,
     broadcast,
     runScriptEvent,
-    endWave,
-    getRoundState,
   } = deps;
 
+  // Back-compat: some callers provide getters instead of direct references.
+  const getPlayersMap = () => {
+    if (deps.players && typeof deps.players.values === 'function') return deps.players;
+    if (typeof deps.getPlayers === 'function') return deps.getPlayers();
+    return undefined;
+  };
+
+  const getWeaponsTable = () => {
+    if (deps.weapons && typeof deps.weapons === 'object') return deps.weapons;
+    if (typeof deps.getWeapons === 'function') return deps.getWeapons();
+    return undefined;
+  };
+
+  const endWave = (typeof deps.endWave === 'function')
+    ? deps.endWave
+    : (typeof deps.endWave === 'function' ? deps.endWave : (()=>{}));
+
+  const getRoundState = (typeof deps.getRoundState === 'function')
+    ? deps.getRoundState
+    : (() => ({
+      betweenRounds: (typeof deps.getBetweenRounds === 'function') ? !!deps.getBetweenRounds() : false,
+      zombiesTarget: (typeof deps.getZombiesTarget === 'function') ? (deps.getZombiesTarget()|0) : 0,
+      zombiesKilled: (typeof deps.getZombiesKilled === 'function') ? (deps.getZombiesKilled()|0) : 0,
+    }));
+
   function fireHitscan(p, weaponId, aim){
+    const weapons = getWeaponsTable();
+    if (!weapons) return;
     const w = weapons[weaponId];
     if (!w) return;
 
@@ -132,8 +155,22 @@ function createCombatSystem(deps){
 
       const dmg = computeDamage(w, h.part, h.t);
 
-      // --- Damage pipeline (engine-owned hit detection; scripts can modify via events) ---
+      // --- Damage pipeline (engine-owned hit detection; scripts can react via events) ---
       z.hp -= dmg;
+
+      // Notify JS-level game events (optional)
+      if (typeof deps.emitGameEvent === 'function'){
+        deps.emitGameEvent('onZombieDamaged', {
+          zombieId: zid,
+          zombie: { ...z },
+          playerId: p.id,
+          weaponId,
+          part: h.part,
+          dmg,
+          dist: h.t,
+          wave: (typeof deps.getWave === 'function') ? deps.getWave() : undefined,
+        });
+      }
 
       // Default economy
       p.cash += 1;
@@ -144,6 +181,29 @@ function createCombatSystem(deps){
         const newZ = zs.filter(zz=>zz.id!==zid);
         setZombies(newZ);
 
+        // Notify the game server so it can maintain counters/economy.
+        if (typeof deps.onZombieKilled === 'function'){
+          try {
+            deps.onZombieKilled({ zombieId: zid, zombie: z, playerId: p.id, weaponId, part: h.part, dmg, dist: h.t });
+          } catch (e){
+            // Never let scripts/game hooks break combat.
+            console.warn('[combat] onZombieKilled hook threw:', e?.message || e);
+          }
+        }
+
+        if (typeof deps.emitGameEvent === 'function'){
+          deps.emitGameEvent('onZombieDeath', {
+            zombieId: zid,
+            zombie: { ...z },
+            playerId: p.id,
+            weaponId,
+            part: h.part,
+            dmg,
+            dist: h.t,
+            wave: (typeof deps.getWave === 'function') ? deps.getWave() : undefined,
+          });
+        }
+
         const rs = getRoundState();
         const ctx = { player:p, zombie:z, weaponId, part:h.part, dmg, dist:h.t, killed:true };
         runScriptEvent('damage', ctx);
@@ -151,11 +211,8 @@ function createCombatSystem(deps){
 
         broadcast({ type:'zdead', zid, by:p.id, cash:p.cash, part:h.part, dmg });
 
-        // end wave if done
-        const rs2 = getRoundState();
-        if (!rs2.betweenRounds && rs2.zombiesKilled >= rs2.zombiesTarget){
-          endWave();
-        }
+        // NOTE: Wave end is handled by the main server tick loop.
+        // Combat should never advance rounds directly.
       } else {
         runScriptEvent('damage', { player:p, zombie:z, weaponId, part:h.part, dmg, dist:h.t, killed:false });
         broadcast({ type:'zhit', zid, by:p.id, hp:z.hp, cash:p.cash, part:h.part, dmg });
@@ -170,6 +227,10 @@ function createCombatSystem(deps){
 
   function tickBurstFire(){
     const now = Date.now();
+    const players = getPlayersMap();
+    const weapons = getWeaponsTable();
+    if (!players || !weapons) return;
+
     for (const p of players.values()){
       const w = weapons[p.primary?.id];
       if (!w || !w.burst) continue;

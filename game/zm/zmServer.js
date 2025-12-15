@@ -4,9 +4,26 @@ const fs = require('fs');
 const path = require('path');
 const { createCombatSystem } = require('../../engine/server/combat');
 
+const { WEAPONS, PRIMARY_LIST, PISTOL_LIST, weaponStateFor } = require('./weapons');
+const { computeWeaponDamage } = require('./combat/damageSystem');
+const { createPlayerLogic } = require('./players/playerLogic');
+const { createPlayerLifecycle } = require('./players/playerLifecycle');
+const { createHudSystem } = require('./players/hudSystem');
+const { createZombieLogic } = require('./zombies/zombieLogic');
+const { createDzsEngine } = require('./scripts/dzsEngine');
+
 let _tickHandle = null;
 let clients = new Set();
 let combat = null;
+let playerLifecycle = null;
+let hud = null;
+let dzs = null;
+let runScriptEvent = () => {};
+let loadScript = () => {};
+let loadAllDzs = () => {};
+
+// playerId -> ws
+const wsByPlayerId = new Map();
 
 /* eslint-disable */
 const TICK_HZ = 20;
@@ -17,6 +34,12 @@ const DEV_ALLOW_MIDROUND = true; // dev menu can swap guns mid-wave
 const ARENA = { size: 120 }; // square arena, centered at origin
 const PLAYER = { speed: 8.0, radius: 0.45, height: 1.7 };
 const ZOMBIE = { speed: 2.1, radius: 0.55, hpBase: 90 };
+
+// Deterministic player spawn "home base".
+// We bias spawns toward this anchor and ensure obstacle generation avoids it.
+// This solves cases where a random spawn lands inside a "bush" crate/prop.
+const PLAYER_SPAWN_ANCHOR = { x: 0, z: -48 };
+
 
 // ----- Pickups (spawnable entities) -----
 // Weapon pickups are server-authoritative. Clients render them and the server
@@ -29,296 +52,6 @@ const PICKUPS = [];
 // Axis-aligned on the XZ plane.
 // { id, x, z, hx, hz, h }
 const OBSTACLES = [];
-
-// ---- Script events (v2) ----
-// Handlers are registered via:
-//   on damage { ... }
-//   on kill { ... }
-// Optional condition:
-//   on damage (dmg > 10 && part=="head") { ... }
-const SCRIPT_EVENTS = { damage: [], kill: [] };
-
-function mulberry32(seed){
-  let t = seed >>> 0;
-  return function(){
-    t += 0x6D2B79F5;
-    let r = Math.imul(t ^ (t >>> 15), 1 | t);
-    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
-    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function genObstacles(){
-  OBSTACLES.length = 0;
-  const rnd = mulberry32(0xD011A2B1); // stable seed (just a fun number)
-  const s = ARENA.size/2 - 10;
-  const count = 18;
-  for (let i=0;i<count;i++){
-    const hx = 0.9 + rnd()*1.4;
-    const hz = 0.9 + rnd()*1.4;
-    let x = (rnd()*2-1) * s;
-    let z = (rnd()*2-1) * s;
-    // keep center area clearer
-    if (Math.hypot(x,z) < 12){
-      x += (x<0?-1:1) * 14;
-      z += (z<0?-1:1) * 14;
-    }
-    OBSTACLES.push({ id:`box_${i}`, x, z, hx, hz, h: 1.25 + rnd()*0.85 });
-  }
-}
-
-function parseScriptValue(v, vars){
-  if (v == null) return null;
-  let s = String(v);
-  // Template substitution: x=${i*2}
-  if (s.includes('${')){
-    s = s.replace(/\$\{([^}]+)\}/g, (_, expr) => {
-      const out = evalScriptExpr(expr, vars);
-      return String(out);
-    });
-  }
-  const n = Number(s);
-  return Number.isFinite(n) ? n : s;
-}
-
-function evalScriptExpr(expr, vars){
-  const safe = String(expr).trim();
-  // Very small safety gate: allow identifiers/numbers/operators only.
-  // (Scripts are local files, but we still reject obviously dangerous tokens.)
-  if (!/^[\w\s\d\+\-\*\/%.()<>!=&|,:?\[\]]+$/.test(safe)){
-    throw new Error(`Unsafe script expression: ${expr}`);
-  }
-  const keys = Object.keys(vars);
-  const vals = keys.map(k => vars[k]);
-  // Provide Math for convenience.
-  const fn = new Function(...keys, 'Math', `return (${safe});`);
-  return fn(...vals, Math);
-}
-
-function runScriptLines(lines, vars){
-  function skipBlock(i){
-    // assumes lines[i] is '{' or current line has already advanced to '{'
-    if (lines[i] !== '{'){
-      // find next '{'
-      while (i < lines.length && lines[i] !== '{') i++;
-    }
-    if (lines[i] !== '{') return i;
-    i++;
-    let depth = 1;
-    while (i < lines.length && depth > 0){
-      if (lines[i] === '{') depth++;
-      else if (lines[i] === '}') depth--;
-      i++;
-    }
-    return i;
-  }
-
-  function execBlock(i){
-    while (i < lines.length){
-      const line = lines[i];
-      if (!line || line.startsWith('#')){ i++; continue; }
-      if (line === '}') return i + 1;
-
-      // let/set/assignment
-      if (/^(let|set)\s+/.test(line) || /^[A-Za-z_]\w*\s*=/.test(line)){
-        const m = line.match(/^(?:let|set)?\s*([A-Za-z_]\w*)\s*=\s*(.+)$/);
-        if (m){
-          const name = m[1];
-          const expr = m[2];
-          vars[name] = evalScriptExpr(expr, vars);
-        }
-        i++; continue;
-      }
-
-      // if (cond) { ... } else { ... }
-      if (line.startsWith('if')){
-        const m = line.match(/^if\s*\((.+)\)\s*$/);
-        const cond = m ? !!evalScriptExpr(m[1], vars) : false;
-        i++;
-        if (cond){
-          // execute then block
-          if (lines[i] !== '{') i = skipBlock(i); // malformed, skip
-          else i = execBlock(i + 1);
-          // if there's an else, skip it
-          if (i < lines.length && lines[i] === 'else'){
-            i++;
-            i = skipBlock(i);
-          }
-        } else {
-          // skip then block
-          i = skipBlock(i);
-          // optional else
-          if (i < lines.length && lines[i] === 'else'){
-            i++;
-            if (lines[i] === '{') i = execBlock(i + 1);
-            else i = skipBlock(i);
-          }
-        }
-        continue;
-      }
-
-      // for (init; cond; step) { ... }
-      if (line.startsWith('for')){
-        const m = line.match(/^for\s*\((.*);(.*);(.*)\)\s*$/);
-        const init = m ? m[1].trim() : '';
-        const condExpr = m ? m[2].trim() : 'false';
-        const step = m ? m[3].trim() : '';
-        // run init
-        if (init){
-          const a = init.match(/^([A-Za-z_]\w*)\s*=\s*(.+)$/);
-          if (a) vars[a[1]] = evalScriptExpr(a[2], vars);
-          else evalScriptExpr(init, vars);
-        }
-        i++;
-        if (lines[i] !== '{'){
-          // malformed; nothing to execute
-          continue;
-        }
-        const bodyStart = i + 1;
-        const afterBody = skipBlock(i); // points after '}'
-        let guard = 0;
-        while (guard++ < 10000 && !!evalScriptExpr(condExpr || 'false', vars)){
-          execBlock(bodyStart);
-          if (step){
-            const s = step.match(/^([A-Za-z_]\w*)\s*=\s*(.+)$/);
-            if (s) vars[s[1]] = evalScriptExpr(s[2], vars);
-            else evalScriptExpr(step, vars);
-          }
-        }
-        i = afterBody;
-        continue;
-      }
-
-      // spawn ...
-      if (line.startsWith('spawn ')){
-        const parts = line.split(/\s+/);
-        const kind = parts[1];
-        const kv = {};
-        for (const p of parts.slice(2)){
-          const [k,v] = p.split('=');
-          if (!k) continue;
-          kv[k] = parseScriptValue(v, vars);
-        }
-        if (kind === 'box'){
-          OBSTACLES.push({
-            id: kv.id || uid(),
-            x: Number(kv.x ?? 0),
-            z: Number(kv.z ?? 0),
-            hx: Number(kv.hx ?? 1.2),
-            hz: Number(kv.hz ?? 1.2),
-            h: Number(kv.h ?? 1.5),
-          });
-        }
-        if (kind === 'zombie'){
-          const hp = ZOMBIE.hpBase + wave*14;
-          const speed = ZOMBIE.speed + wave*0.06;
-          zombies.push({ id: kv.id || uid(), x:Number(kv.x ?? 0), y:0, z:Number(kv.z ?? 0), hp, speed });
-        }
-        if (kind === 'weapon'){
-          const wid = String(kv.weapon ?? kv.weaponId ?? kv.id ?? '').trim();
-          if (WEAPONS[wid]){
-            PICKUPS.push({ id: kv.pid || uid(), kind:'weapon', weaponId: wid, x:Number(kv.x ?? 0), y:0.35, z:Number(kv.z ?? 0) });
-          }
-        }
-        i++; continue;
-      }
-
-      // else token (handled by if)
-      if (line === 'else'){ i++; continue; }
-
-      // function call statement (for script hooks): addCash(5)
-      if (/^[A-Za-z_]\w*\s*\(.*\)\s*$/.test(line)){
-        try { evalScriptExpr(line, vars); } catch {}
-        i++; continue;
-      }
-
-      // unknown line: ignore
-      i++;
-    }
-    return i;
-  }
-
-  execBlock(0);
-}
-
-function loadScriptFile(){
-  // Script system (v2):
-  // - Brace-based script with if/else, for loops, assignments
-  // - Spawnables: box|zombie|weapon
-  // - Event hooks:
-  //     on damage { ... }
-  //     on kill { ... }
-  //   Optional condition:
-  //     on damage (part=="head" && weapon=="glock") { ... }
-  //
-  // Events run ON TOP of the game's defaults (e.g. default cash awards).
-
-  const fs = require('fs');
-  const path = require('path');
-  const scriptPath = path.join(__dirname, 'scripts', 'level1.dzs');
-  if (!fs.existsSync(scriptPath)) return;
-
-  const txtRaw = fs.readFileSync(scriptPath, 'utf8');
-  const txt = txtRaw.replace(/\/\/.*$/gm, ''); // strip // comments too
-  const cooked = txt.replace(/([{}])/g, '\n$1\n');
-  const lines = cooked.split(/\r?\n/).map(l => l.trim()).filter(l => l.length);
-
-  // Reset events each boot
-  SCRIPT_EVENTS.damage.length = 0;
-  SCRIPT_EVENTS.kill.length = 0;
-
-  function extractBlock(startIndex){
-    // Expects lines[startIndex] === '{'
-    let i = startIndex;
-    if (lines[i] !== '{') return { block: [], next: i };
-    i++;
-    let depth = 1;
-    const block = [];
-    while (i < lines.length && depth > 0){
-      const l = lines[i];
-      if (l === '{'){ depth++; block.push(l); i++; continue; }
-      if (l === '}'){
-        depth--;
-        if (depth > 0) block.push(l);
-        i++;
-        continue;
-      }
-      block.push(l);
-      i++;
-    }
-    return { block, next: i };
-  }
-
-  // Pull out event handlers, leaving "global" lines to run once at startup
-  const globalLines = [];
-  for (let i=0;i<lines.length;){
-    const line = lines[i];
-    const m = line.match(/^on\s+(damage|kill)(?:\s*\((.+)\))?\s*$/);
-    if (m){
-      const evt = m[1];
-      const condExpr = (m[2] || '').trim();
-      i++;
-      if (lines[i] !== '{'){ i++; continue; }
-      const { block, next } = extractBlock(i);
-      SCRIPT_EVENTS[evt].push({ condExpr, lines: block });
-      i = next;
-      continue;
-    }
-    globalLines.push(line);
-    i++;
-  }
-
-  const vars = {
-    wave,
-    arenaSize: ARENA.size,
-  };
-
-  try {
-    runScriptLines(globalLines, vars);
-  } catch (e){
-    console.error('Script error:', e?.message || e);
-  }
-}
 
 const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
 const rand = (a,b)=>a+Math.random()*(b-a);
@@ -339,40 +72,6 @@ function raySphere(origin, dir, center, radius, maxDist){
   return t;
 }
 
-const WEAPONS = {
-  // --- Pistols (semi-auto) ---
-  // Target baseline: 20 body damage at close range
-  glock:   { name:"Glock", slot:"pistol", mode:"semi", fireMs:180, dmgClose:20, dmgFar:14, spread:0.010, pellets:1, range:55, mag:17, reloadMs:1000 },
-  p99:     { name:"P99",   slot:"pistol", mode:"semi", fireMs:160, dmgClose:20, dmgFar:14, spread:0.012, pellets:1, range:52, mag:15, reloadMs:1050 },
-  fiveseven:{ name:"Five-Seven", slot:"pistol", mode:"semi", fireMs:170, dmgClose:22, dmgFar:15, spread:0.011, pellets:1, range:58, mag:20, reloadMs:1150 },
-
-  // --- Shotguns ---
-  // Target baseline: 70 total body damage if most pellets land at close range
-  shotgun_semi:{ name:"Shotgun (Semi)", slot:"primary", mode:"semi", fireMs:520, dmgClose:10, dmgFar:6, spread:0.080, pellets:7, range:22, mag:8, reloadMs:1450 },
-  shotgun_auto:{ name:"Shotgun (Auto)", slot:"primary", mode:"auto", fireMs:230, dmgClose:10, dmgFar:6, spread:0.090, pellets:7, range:20, mag:12, reloadMs:1600 },
-
-  // --- Assault Rifles ---
-  // Target baseline: 34 body damage at close range
-  ar_burst: { name:"AR (Burst)", slot:"primary", mode:"burst", fireMs:320, burst:3, burstGapMs:65, dmgClose:34, dmgFar:22, spread:0.020, pellets:1, range:65, mag:30, reloadMs:1500 },
-  ar_full:  { name:"AR (Full)",  slot:"primary", mode:"auto",  fireMs:95,  dmgClose:34, dmgFar:22, spread:0.024, pellets:1, range:62, mag:30, reloadMs:1550 },
-
-  // --- DMR (semi-auto) ---
-  // Target baseline: 60 body damage, 5-round mag
-  dmr_5:    { name:"DMR (5-Round)", slot:"primary", mode:"semi", fireMs:260, dmgClose:60, dmgFar:42, spread:0.010, pellets:1, range:95, mag:5, reloadMs:1700 },
-
-  // --- LMG ---
-  // Target baseline: 27 body damage
-  mg42:     { name:"MG42", slot:"primary", mode:"auto", fireMs:65, dmgClose:27, dmgFar:18, spread:0.030, pellets:1, range:70, mag:75, reloadMs:2200 },
-};
-
-const PRIMARY_LIST = ["shotgun_semi","shotgun_auto","ar_burst","ar_full","dmr_5","mg42"];
-const PISTOL_LIST = ["glock","p99","fiveseven"];
-
-function weaponStateFor(id){
-  const w = WEAPONS[id];
-  return { id, mag:w.mag, reserve:w.mag*4, reloading:false, reloadUntil:0, nextFireAt:0, burstLeft:0, burstNextAt:0 };
-}
-
 const players = new Map(); // id -> player
 let zombies = []; // {id,x,y,z,hp,kind,speed}
 // Weapon pickups: { id, kind:'weapon', weaponId, x, y, z }
@@ -386,106 +85,334 @@ let zombiesKilled = 0;
 let spawnEveryMs = 700;
 let lastSpawnAt = 0;
 
+// Wave/zombie logic is modularized under game/zm/zombies.
+// WS message handlers are defined at module scope, so we keep wired function refs here.
+let startNextWaveFn = null;
+let endWaveFn = null;
+let integratePlayersFn = null;
+let spawnLogicFn = null;
+let updateZombiesFn = null;
+
+
+function integratePlayers(){
+  if (!integratePlayersFn) return;
+  return integratePlayersFn();
+}
+function spawnLogic(){
+  if (!spawnLogicFn) return;
+  return spawnLogicFn();
+}
+function updateZombies(){
+  if (!updateZombiesFn) return;
+  return updateZombiesFn();
+}
+
+
+
+function mulberry32(seed){
+  let t = seed >>> 0;
+  return function(){
+    t += 0x6D2B79F5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function genObstacles(){
+  OBSTACLES.length = 0;
+  const rnd = mulberry32(0xD011A2B1); // stable seed (just a fun number)
+  const s = ARENA.size/2 - 10;
+  const count = 18;
+  const avoidPts = [
+    { x: PLAYER_SPAWN_ANCHOR.x, z: PLAYER_SPAWN_ANCHOR.z, r: 14 },
+    { x: 0, z: 0, r: 10 },
+  ];
+  for (let i=0;i<count;i++){
+    // Re-roll until this obstacle doesn't crowd the spawn anchor.
+    // Deterministic because rnd() is deterministic.
+    let x=0, z=0, hx=1.2, hz=1.2;
+    for (let tries=0; tries<50; tries++){
+      hx = 0.9 + rnd()*1.4;
+      hz = 0.9 + rnd()*1.4;
+      x = (rnd()*2-1) * s;
+      z = (rnd()*2-1) * s;
+
+      // keep center area clearer
+      if (Math.hypot(x,z) < 12){
+        x += (x<0?-1:1) * 14;
+        z += (z<0?-1:1) * 14;
+      }
+
+      // keep away from key zones (player spawn anchor, etc.)
+      let ok = true;
+      for (const p of avoidPts){
+        if (Math.hypot(x - p.x, z - p.z) < p.r){ ok = false; break; }
+      }
+      if (ok) break;
+    }
+    OBSTACLES.push({ id:`box_${i}`, x, z, hx, hz, h: 1.25 + rnd()*0.85 });
+  }
+}
+
+function loadScriptFile(){ /* scripts now autoload inside createZMServer via dzsEngine */ }
+
 // Build deterministic obstacles and then allow scripts to add more.
 genObstacles();
 loadScriptFile();
 
-function runScriptEvent(evt, ctx){
-  const handlers = SCRIPT_EVENTS[evt] || [];
-  if (!handlers.length) return;
+// ---------------- Script APIs (JS customscripts + DSL) ----------------
+function clampInt(n, lo, hi){
+  const v = Math.floor(Number(n) || 0);
+  return Math.max(lo, Math.min(hi, v));
+}
 
-  const p = ctx.player || null;
-  const z = ctx.zombie || null;
+function resolvePlayer(entityOrId){
+  if (!entityOrId) return null;
+  if (typeof entityOrId === 'string') return players.get(entityOrId) || null;
+  if (typeof entityOrId === 'object' && entityOrId.id) return players.get(entityOrId.id) || entityOrId;
+  return null;
+}
 
-  const vars = {
-    // globals
-    wave,
-    arenaSize: ARENA.size,
+function weaponStateWithAmmo(weaponId, mode){
+  const st = weaponStateFor(weaponId);
+  const w = WEAPONS[weaponId];
+  if (!w) return st;
+  const clipMax = w.clipMaxAmmo ?? w.mag ?? 0;
+  const reserveMax = w.reserveMaxAmmo ?? w.reserve ?? 0;
+  const m = (mode || 'full').toLowerCase();
+  if (m === 'none'){
+    st.mag = 0;
+    st.reserve = 0;
+  } else if (m === 'clip'){
+    st.mag = clipMax;
+    st.reserve = 0;
+  } else {
+    st.mag = clipMax;
+    st.reserve = reserveMax;
+  }
+  return st;
+}
 
-    // event fields
-    event: evt,
-    playerId: p ? p.id : null,
-    zombieId: z ? z.id : null,
-    weapon: ctx.weaponId || null,
-    part: ctx.part || null,
-    dmg: ctx.dmg || 0,
-    dist: ctx.dist || 0,
-    killed: !!ctx.killed,
-    cash: p ? p.cash : 0,
-    zombieHp: z ? z.hp : 0,
+function syncInventorySlot(p, slot, weaponId){
+  if (!p?.inventory?.weapons) return;
+  if (!p.inventory.weapons[slot]) return;
+  p.inventory.weapons[slot].id = weaponId || null;
+}
 
-    // cash API (scriptable give/take)
-    addCash: (amount) => {
-      if (!p) return 0;
-      const a = Number(amount) || 0;
-      if (!Number.isFinite(a)) return p.cash;
-      p.cash = Math.max(0, p.cash + Math.floor(a));
-      vars.cash = p.cash;
-      broadcast({ type:"cash", id:p.id, cash:p.cash, reason:`script:${evt}:add` });
-      return p.cash;
-    },
-    takeCash: (amount) => {
-      if (!p) return 0;
-      const a = Number(amount) || 0;
-      if (!Number.isFinite(a)) return p.cash;
-      p.cash = Math.max(0, p.cash - Math.floor(a));
-      vars.cash = p.cash;
-      broadcast({ type:"cash", id:p.id, cash:p.cash, reason:`script:${evt}:take` });
-      return p.cash;
-    },
-    setCash: (amount) => {
-      if (!p) return 0;
-      const a = Number(amount) || 0;
-      if (!Number.isFinite(a)) return p.cash;
-      p.cash = Math.max(0, Math.floor(a));
-      vars.cash = p.cash;
-      broadcast({ type:"cash", id:p.id, cash:p.cash, reason:`script:${evt}:set` });
-      return p.cash;
-    },
+function apiGiveWeapon(entityOrId, weaponId, opts){
+  const p = resolvePlayer(entityOrId);
+  const w = WEAPONS[weaponId];
+  if (!p || !w) return false;
+  const o = (opts && typeof opts === 'object') ? opts : { withAmmo: opts };
+  const withAmmo = o.withAmmo || 'full';
+  const equip = (o.equip !== undefined) ? !!o.equip : true;
+  const st = weaponStateWithAmmo(weaponId, withAmmo);
 
-    // dev/script APIs
-    equipWeapon: (playerId, weaponId) => {
-      const pid = playerId || (p ? p.id : null);
-      const pl = pid ? players.get(pid) : null;
-      if (!pl) return false;
-      const w = WEAPONS[weaponId];
-      if (!w) return false;
-      if (w.slot === "primary") pl.primary = weaponStateFor(weaponId);
-      if (w.slot === "pistol") pl.pistol = weaponStateFor(weaponId);
-      broadcast({ type:"loadout", id:pl.id, pistol: pl.pistol, primary: pl.primary });
-      return true;
-    },
-    setGodMode: (playerId, enabled) => {
-      const pid = playerId || (p ? p.id : null);
-      const pl = pid ? players.get(pid) : null;
-      if (!pl) return false;
-      pl.godMode = !!enabled;
-      broadcast({ type:"state", players: Array.from(players.values()).map(snapshotFor), zombies, pickups: PICKUPS, round: { between: betweenRounds, wave, zombiesTarget } });
-      return true;
-    },
-    teleportZombieToPlayer: (zombieId, playerId) => {
-      const zzz = zombies.find(zz=>zz.id===zombieId);
-      const pid = playerId || (p ? p.id : null);
-      const pl = pid ? players.get(pid) : null;
-      if (!zzz || !pl) return false;
-      zzz.x = pl.x; zzz.z = pl.z;
-      return true;
-    },
+  if (w.slot === 'pistol'){
+    p.pistol = st;
+    syncInventorySlot(p, 'pistol', weaponId);
+  } else {
+    // default to primary
+    p.primary = st;
+    syncInventorySlot(p, 'primary', weaponId);
+  }
 
+  if (equip){
+    p._equipped = weaponId;
+  }
 
-  };
-  for (const h of handlers){
-    try {
-      if (h.condExpr){
-        const ok = !!evalScriptExpr(h.condExpr, vars);
-        if (!ok) continue;
+  broadcast({ type:"loadout", id:p.id, pistol:p.pistol, primary:p.primary, inventory:p.inventory });
+  return true;
+}
+
+function apiTakeWeapon(entityOrId, weaponId){
+  const p = resolvePlayer(entityOrId);
+  if (!p) return false;
+  let changed = false;
+  if (p.pistol && p.pistol.id === weaponId){
+    p.pistol = weaponStateFor(PISTOL_LIST[0] || 'glock');
+    syncInventorySlot(p, 'pistol', p.pistol.id);
+    changed = true;
+  }
+  if (p.primary && p.primary.id === weaponId){
+    p.primary = null;
+    syncInventorySlot(p, 'primary', null);
+    changed = true;
+  }
+  if (changed){
+    broadcast({ type:"loadout", id:p.id, pistol:p.pistol, primary:p.primary, inventory:p.inventory });
+  }
+  return changed;
+}
+
+function apiSetAmmo(entityOrId, weaponId, clip, reserve){
+  const p = resolvePlayer(entityOrId);
+  const w = WEAPONS[weaponId];
+  if (!p || !w) return false;
+  const ref = (p.pistol && p.pistol.id===weaponId) ? p.pistol : (p.primary && p.primary.id===weaponId ? p.primary : null);
+  if (!ref) return false;
+  const clipMax = w.clipMaxAmmo ?? w.mag ?? ref.mag ?? 0;
+  const reserveMax = w.reserveMaxAmmo ?? w.reserve ?? ref.reserve ?? 0;
+  ref.mag = clampInt(clip, 0, clipMax);
+  ref.reserve = clampInt(reserve, 0, reserveMax);
+  broadcast({ type:"ammo", id:p.id, weapon:weaponId, mag:ref.mag, reserve:ref.reserve });
+  return true;
+}
+
+function apiRestockAmmo(entityOrId, weaponIdOrAll, mode){
+  const p = resolvePlayer(entityOrId);
+  if (!p) return false;
+  const m = (mode || 'full').toLowerCase();
+  const ids = [];
+  if (!weaponIdOrAll || weaponIdOrAll === 'all'){
+    if (p.pistol?.id) ids.push(p.pistol.id);
+    if (p.primary?.id) ids.push(p.primary.id);
+  } else {
+    ids.push(weaponIdOrAll);
+  }
+
+  let any = false;
+  for (const wid of ids){
+    const w = WEAPONS[wid];
+    if (!w) continue;
+    const ref = (p.pistol && p.pistol.id===wid) ? p.pistol : (p.primary && p.primary.id===wid ? p.primary : null);
+    if (!ref) continue;
+    const clipMax = w.clipMaxAmmo ?? w.mag ?? 0;
+    const reserveMax = w.reserveMaxAmmo ?? w.reserve ?? 0;
+    if (m === 'reserve'){
+      ref.reserve = reserveMax;
+    } else if (m === 'clip'){
+      ref.mag = clipMax;
+    } else {
+      ref.mag = clipMax;
+      ref.reserve = reserveMax;
+    }
+    broadcast({ type:"ammo", id:p.id, weapon:wid, mag:ref.mag, reserve:ref.reserve });
+    any = true;
+  }
+  return any;
+}
+
+function resolvePlayerId(entityOrId){
+  const p = resolvePlayer(entityOrId);
+  return p ? p.id : (typeof entityOrId === 'string' ? entityOrId : null);
+}
+
+function apiHudText(entityOrId, key, text, x, y, opts){
+  if (!hud) return false;
+  const pid = resolvePlayerId(entityOrId);
+  if (!pid) return false;
+  hud.setText(pid, key, text, x, y, opts);
+  return true;
+}
+
+function apiHudRect(entityOrId, key, x, y, w, h, opts){
+  if (!hud) return false;
+  const pid = resolvePlayerId(entityOrId);
+  if (!pid) return false;
+  hud.setRect(pid, key, x, y, w, h, opts);
+  return true;
+}
+
+function apiHudClear(entityOrId, key){
+  if (!hud) return false;
+  const pid = resolvePlayerId(entityOrId);
+  if (!pid) return false;
+  hud.clear(pid, key);
+  return true;
+}
+
+const SCRIPT_API = {
+  Players: {
+    all: () => Array.from(players.values()),
+    byId: (id) => players.get(id) || null,
+    inRadius: (pos, r) => {
+      const cx = Number(pos?.x)||0, cz = Number(pos?.z)||0;
+      const rr = (Number(r)||0);
+      const out = [];
+      for (const p of players.values()){
+        const dx = p.x - cx, dz = p.z - cz;
+        if (dx*dx + dz*dz <= rr*rr) out.push(p);
       }
-      runScriptLines(h.lines, vars);
-    } catch (e){
-      console.error(`Script event error (${evt}):`, e?.message || e);
+      return out;
+    },
+    filter: (fn) => Array.from(players.values()).filter(fn),
+  },
+  weapons: {
+    give: apiGiveWeapon,
+    take: apiTakeWeapon,
+    restockAmmo: apiRestockAmmo,
+    setAmmo: apiSetAmmo,
+  },
+  hud: {
+    text: apiHudText,
+    rect: apiHudRect,
+    clear: apiHudClear,
+  }
+};
+
+// --- Optional JS event handlers (scriptable, but game must work without them) ---
+// Built-in: root/game/zm/scripts/events.js
+// Custom:   root/game/zm/customscripts/*.js
+// Each exports an object: { onGameStart(){}, onRoundStart(){}, onZombieSpawn(){}, ... }
+// name -> [fn, fn, ...]
+const JS_EVENT_HANDLERS = Object.create(null);
+
+function registerJSEvents(obj, label){
+  if (!obj || typeof obj !== 'object') return;
+  for (const [k, v] of Object.entries(obj)){
+    if (typeof v !== 'function') continue;
+    if (!JS_EVENT_HANDLERS[k]) JS_EVENT_HANDLERS[k] = [];
+    JS_EVENT_HANDLERS[k].push(v);
+  }
+}
+
+function tryLoadJSEvents(modPath, label){
+  try {
+    // eslint-disable-next-line import/no-dynamic-require, global-require
+    let m = require(modPath);
+    if (m && m.default) m = m.default;
+    registerJSEvents(m, label);
+  } catch (e) {
+    // Optional, ignore if missing
+  }
+}
+
+// Load built-in events
+tryLoadJSEvents('./scripts/events', 'builtin');
+
+// Load customscripts folder
+try {
+  const dir = path.join(__dirname, 'customscripts');
+  if (fs.existsSync(dir)){
+    const files = fs.readdirSync(dir)
+      .filter(f => f.endsWith('.js'))
+      .sort((a,b)=> a.localeCompare(b));
+    for (const f of files){
+      tryLoadJSEvents(path.join(dir, f), `custom:${f}`);
+    }
+  }
+} catch (e) {
+  console.warn('[customscripts] failed to load:', e?.stack || e);
+}
+
+function emitJSEvent(name, payload){
+  // Attach script API helpers (players targeting, weapon actions, etc.)
+  // so customscripts can do for-loops and group targeting safely.
+  if (payload && typeof payload === 'object' && !payload.api){
+    payload.api = SCRIPT_API;
+  }
+  const list = JS_EVENT_HANDLERS[name];
+  if (!list || !list.length) return;
+  for (const fn of list){
+    try { fn(payload); } catch (e) {
+      console.warn(`[js-events] ${name} threw:`, e?.stack || e);
     }
   }
 }
+
+
 
 function spawnWeaponPickup(weaponId, x, z, opts = {}){
   if (!WEAPONS[weaponId]) return null;
@@ -514,53 +441,20 @@ function broadcast(obj){
   }
 }
 
-function nearestPlayer(x,z){
-  let best=null, bd=1e9;
-  for (const p of players.values()){
-    if (p.hp<=0) continue;
-    const dx=p.x-x, dz=p.z-z;
-    const d=dx*dx+dz*dz;
-    if (d<bd){ bd=d; best=p; }
-  }
-  return best;
+function sendTo(playerId, obj){
+  const ws = wsByPlayerId.get(String(playerId));
+  if (!ws || ws.readyState !== 1) return false;
+  try { ws.send(JSON.stringify(obj)); } catch { return false; }
+  return true;
 }
 
-function spawnZombie(){
-  const edge = Math.floor(Math.random()*4);
-  const s = ARENA.size/2 + 4;
-  let x=0,z=0;
-  if (edge===0){ x=rand(-s,s); z=-s; }
-  if (edge===1){ x=s; z=rand(-s,s); }
-  if (edge===2){ x=rand(-s,s); z=s; }
-  if (edge===3){ x=-s; z=rand(-s,s); }
 
-  const hp = ZOMBIE.hpBase + wave*14;
-  const speed = ZOMBIE.speed + wave*0.06 + (Math.random()<Math.min(0.18, 0.05+wave*0.01) ? 0.9 : 0);
-  const ent = { id: uid(), x, y:0, z, hp, speed };
-  zombies.push(ent);
-  // lightweight debug (doesn't spam too hard)
-  if (zombiesSpawned === 1 || zombiesSpawned % 5 === 0){
-    console.log(`[wave ${wave}] spawned ${zombiesSpawned}/${zombiesTarget} (alive ${zombies.length})`);
-  }
-}
 
-function startNextWave(){
-  betweenRounds = false;
-  roundStartAt = Date.now();
-  zombiesTarget = Math.floor(8 + wave*2.4);
-  spawnEveryMs = clamp(760 - wave*18, 280, 760);
-  zombiesSpawned = 0;
-  zombiesKilled = 0;
-  lastSpawnAt = 0;
-  console.log(`\n== Wave ${wave} START == target=${zombiesTarget} spawnEveryMs=${spawnEveryMs}`);
-  broadcast({ type:"round", between:false, wave, zombiesTarget });
-}
 
-function endWave(){
-  betweenRounds = true;
-  wave += 1;
-  broadcast({ type:"round", between:true, wave, zombiesTarget:0 });
-}
+
+
+
+
 
 function canPickPrimary(p, weaponId){
   if (!PRIMARY_LIST.includes(weaponId)) return { ok:false, reason:"Not a primary weapon." };
@@ -575,23 +469,10 @@ function applyPrimaryPick(p, weaponId){
   p.primaryCooldowns[weaponId] = wave + 3;
   p.primaryLast = weaponId;
   p.primary = weaponStateFor(weaponId);
+  if (p.inventory?.weapons?.primary) p.inventory.weapons.primary.id = p.primary.id;
 }
 
-function lineHitsPlayer(origin, dir, maxDist, target){
-  // target is capsule-ish cylinder around head/chest
-  const ox=origin.x, oy=origin.y, oz=origin.z;
-  const dx=dir.x, dy=dir.y, dz=dir.z;
 
-  const tx=target.x, ty=target.y+1.2, tz=target.z;
-  const vx = tx-ox, vy=ty-oy, vz=tz-oz;
-  const t = vx*dx + vy*dy + vz*dz;
-  if (t<0 || t>maxDist) return null;
-  const cx = ox+dx*t, cy=oy+dy*t, cz=oz+dz*t;
-  const distSq = (tx-cx)**2 + (ty-cy)**2 + (tz-cz)**2;
-  const r=0.55;
-  if (distSq <= r*r) return { t };
-  return null;
-}
 
 function lineHitsZombie(origin, dir, maxDist, z){
   // Two-sphere hitboxes: body + head (robust ray-sphere intersections)
@@ -604,16 +485,7 @@ function lineHitsZombie(origin, dir, maxDist, z){
   return best;
 }
 
-function computeDamage(w, part, dist){
-  // Foundation: simple linear falloff from dmgClose -> dmgFar over [0..range]
-  const close = (w.dmgClose != null) ? w.dmgClose : (w.damage != null ? w.damage : 20);
-  const far = (w.dmgFar != null) ? w.dmgFar : Math.max(1, Math.round(close * 0.65));
-  const r = Math.max(1, w.range || 50);
-  const t = Math.max(0, Math.min(1, dist / r));
-  const base = Math.round(close + (far - close) * t);
-  const mult = (part === 'head') ? 2.0 : 1.0;
-  return Math.max(1, Math.round(base * mult));
-}
+// Damage calculation moved to game/zm/combat/damageSystem.js
 
 function fireHitscan(p, weaponId, aim){
   const w = WEAPONS[weaponId];
@@ -689,7 +561,7 @@ function fireHitscan(p, weaponId, aim){
     const z = zombies.find(zz=>zz.id===zid);
     if (!z) continue;
 
-    const dmg = computeDamage(w, h.part, h.t);
+    const dmg = computeWeaponDamage(w, h.part, h.t);
     z.hp -= dmg;
 
     // Default money system:
@@ -707,7 +579,6 @@ function fireHitscan(p, weaponId, aim){
       runScriptEvent('kill',   { player:p, zombie:z, weaponId:weaponId, part:h.part, dmg, dist:h.t, killed:true });
 
       broadcast({ type:"zdead", zid, by:p.id, cash:p.cash, zk:zombiesKilled, part: h.part, dmg });
-      if (!betweenRounds && zombiesKilled >= zombiesTarget) endWave();
     } else {
       runScriptEvent('damage', { player:p, zombie:z, weaponId:weaponId, part:h.part, dmg, dist:h.t, killed:false });
       broadcast({ type:"zhit", zid, by:p.id, hp:z.hp, cash:p.cash, part: h.part, dmg });
@@ -761,7 +632,7 @@ function tickBurstFire(){
       if (best){
         const z = zombies.find(zz=>zz.id===best.zid);
         if (z){
-          const dmg = computeDamage(w, best.part, best.t);
+          const dmg = computeWeaponDamage(w, best.part, best.t);
           z.hp -= dmg;
           // Default money system for burst bullets: +$1 hit, +$5 kill bonus
           p.cash += 1;
@@ -775,7 +646,6 @@ function tickBurstFire(){
             runScriptEvent('kill',   { player:p, zombie:z, weaponId:ws.id, part: best.part, dmg, dist: best.t, killed:true });
 
             broadcast({ type:"zdead", zid:best.zid, by:p.id, cash:p.cash, zk:zombiesKilled, part: best.part, dmg });
-            if (!betweenRounds && zombiesKilled >= zombiesTarget) endWave();
           } else {
             runScriptEvent('damage', { player:p, zombie:z, weaponId:ws.id, part: best.part, dmg, dist: best.t, killed:false });
             broadcast({ type:"zhit", zid:best.zid, by:p.id, hp:z.hp, cash:p.cash, part: best.part, dmg });
@@ -921,51 +791,9 @@ function resolveCollisions(){
     }
   }
 }
-function updateZombies(){
-  for (const z of zombies){
-    const target = nearestPlayer(z.x, z.z);
-    if (!target) continue;
-    const dx = target.x - z.x;
-    const dz = target.z - z.z;
-    const d = Math.hypot(dx, dz) || 1e-6;
-    z.x += (dx/d) * z.speed * DT;
-    z.z += (dz/d) * z.speed * DT;
 
-    // obstacle collision
-    resolveObstacleCollisionsFor(z, ZOMBIE.radius);
 
-    // attack if close
-    const dist = Math.hypot(target.x - z.x, target.z - z.z);
-    if (dist < (PLAYER.radius + ZOMBIE.radius + 0.25)){
-      const now = Date.now();
-      if (now >= target.nextHitAt){
-        if (target.godMode){
-          target.nextHitAt = now + 250; // still throttle
-          continue;
-        }
-        target.nextHitAt = now + 650;
-        const dmg = 10 + Math.floor(wave*0.4);
-        const reduced = dmg * (1 - target.armor);
-        target.hp = clamp(target.hp - reduced, 0, 100);
-        broadcast({ type:"phit", id:target.id, hp:target.hp });
-        if (target.hp <= 0){
-          broadcast({ type:"pdown", id:target.id });
-          // simple respawn on next betweenRounds
-        }
-      }
-    }
-  }
-}
 
-function spawnLogic(){
-  if (betweenRounds) return;
-  if (zombiesSpawned >= zombiesTarget) return;
-  const now = Date.now();
-  if (now - lastSpawnAt < spawnEveryMs) return;
-  lastSpawnAt = now;
-  zombiesSpawned += 1;
-  spawnZombie();
-}
 
 function snapshotFor(p){
   return {
@@ -975,17 +803,133 @@ function snapshotFor(p){
     hp:p.hp, cash:p.cash,
     pistol:{ id:p.pistol.id, mag:p.pistol.mag, reserve:p.pistol.reserve },
     primary:p.primary ? { id:p.primary.id, mag:p.primary.mag, reserve:p.primary.reserve } : null,
+    // Phase 1 inventory (server authoritative). Client can display or ignore fields it doesn't know yet.
+    inventory: p.inventory || null,
     armor:p.armor,
     speed:p.speed,
     godMode: !!p.godMode
   };
 }
 
+function makeDefaultInventory(p){
+  return {
+    weapons: {
+      primary: { id: p.primary ? p.primary.id : null },
+      pistol: { id: p.pistol ? p.pistol.id : null },
+      launcher: { id: null }, // rocket launcher slot
+    },
+    equipment: {
+      medkit: { count: 0, max: 2 },
+      frag: { count: 0, max: 3 },
+      stun: { count: 0, max: 3 },
+    },
+    perks: [],
+    meta: {
+      // reserved for later
+    }
+  };
+}
+
+// Player spawn selection should avoid every collision box.
+function dist2(x1, z1, x2, z2){
+  const dx = x1 - x2;
+  const dz = z1 - z2;
+  return Math.hypot(dx, dz);
+}
+
+function tooCloseToBox(x, z, o, pad=0.9){
+  const r = (PLAYER && PLAYER.radius != null) ? PLAYER.radius : 0.55;
+  const hx = Math.abs(o.hx || 0);
+  const hz = Math.abs(o.hz || 0);
+  const boxRadius = Math.hypot(hx, hz);
+  return dist2(x, z, o.x, o.z) <= (boxRadius + r + pad);
+}
+
+function isSpawnBlocked(x, z, pad=0.65){
+  const r = (PLAYER && PLAYER.radius != null) ? PLAYER.radius : 0.55;
+  const extra = r + pad;
+  for (const o of OBSTACLES){
+    const hx = (o.hx||0) + extra;
+    const hz = (o.hz||0) + extra;
+    // AABB overlap
+    if (Math.abs(x - o.x) <= hx && Math.abs(z - o.z) <= hz) return true;
+    // Corner safety radius
+    if (tooCloseToBox(x, z, o, pad)) return true;
+  }
+  return false;
+}
+
+function nudgeSpawnOut(x, z){
+  const r = (PLAYER && PLAYER.radius != null) ? PLAYER.radius : 0.55;
+  const extra = r + 0.75;
+  let px = x, pz = z;
+  for (let iter=0; iter<8; iter++){
+    let moved=false;
+    for (const o of OBSTACLES){
+      const hx = (o.hx||0) + extra;
+      const hz = (o.hz||0) + extra;
+      const dx = px - o.x;
+      const dz = pz - o.z;
+      const ax = Math.abs(dx);
+      const az = Math.abs(dz);
+      if (ax <= hx && az <= hz){
+        const penX = hx - ax;
+        const penZ = hz - az;
+        if (penX < penZ) px += (dx >= 0 ? 1 : -1) * (penX + 0.05);
+        else pz += (dz >= 0 ? 1 : -1) * (penZ + 0.05);
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  return { x: px, z: pz };
+}
+
+function findSafeSpawn(){
+  // First: jitter around the anchor. This is the most reliable way to avoid
+  // "spawn in bush" situations, because the anchor zone is kept clear when
+  // obstacles are generated.
+  for (let i=0;i<80;i++){
+    const ang = Math.random()*Math.PI*2;
+    const rad = 1.5 + Math.random()*7.5;
+    const x = PLAYER_SPAWN_ANCHOR.x + Math.cos(ang)*rad;
+    const z = PLAYER_SPAWN_ANCHOR.z + Math.sin(ang)*rad;
+    if (!isSpawnBlocked(x,z,0.9)) return nudgeSpawnOut(x,z);
+  }
+  const tries = [
+    { n: 40, min:-8,  max: 8 },
+    { n: 50, min:-16, max: 16 },
+    { n: 60, min:-24, max: 24 },
+  ];
+  for (const t of tries){
+    for (let i=0;i<t.n;i++){
+      const x = rand(t.min, t.max);
+      const z = rand(t.min, t.max);
+      if (isSpawnBlocked(x,z)) continue;
+      return nudgeSpawnOut(x,z);
+    }
+  }
+  const pts = [
+    {x:-14,z:-14},{x:14,z:-14},{x:-14,z:14},{x:14,z:14},
+    {x:0,z:-18},{x:0,z:18},{x:-18,z:0},{x:18,z:0}
+  ];
+  for (const p of pts){ if (!isSpawnBlocked(p.x,p.z,1.0)) return nudgeSpawnOut(p.x,p.z); }
+  for (let gx=-22; gx<=22; gx+=2){
+    for (let gz=-22; gz<=22; gz+=2){
+      if (!isSpawnBlocked(gx,gz,1.0)) return nudgeSpawnOut(gx,gz);
+    }
+  }
+  return nudgeSpawnOut(0,0);
+}
+
 function handleConnection(ws){
   const id = uid();
+  wsByPlayerId.set(id, ws);
+  ws._pid = id;
+  const sp = findSafeSpawn();
   const p = {
     id, name:"Player-"+id.slice(0,4),
-    x: rand(-8,8), y:0, z: rand(-8,8),
+    x: sp.x, y:0, z: sp.z,
     yaw:0, pitch:0,
     hp:100, cash:20,
     armor:0,
@@ -997,13 +941,41 @@ function handleConnection(ws){
     pistol: weaponStateFor(PISTOL_LIST[Math.floor(Math.random()*PISTOL_LIST.length)]),
     primary: null,
 
+    // Phase 1: inventory system. Weapon states still live at top-level for compatibility,
+    // but inventory is the canonical slot registry going forward.
+    inventory: null,
+
     // pick rules
     primaryLast: null,
     primaryCooldowns: {},
 
     lastAim: { yaw:0, pitch:0 }
   };
+
+  p.inventory = makeDefaultInventory(p);
   players.set(id, p);
+
+  emitJSEvent('onPlayerConnect', {
+    playerId: p.id,
+    player: { id: p.id, name: p.name, x: p.x, y: p.y, z: p.z, hp: p.hp, cash: p.cash },
+    time: Date.now(),
+    wave,
+    betweenRounds,
+  });
+
+  emitJSEvent('onPlayerSpawned', {
+    playerId: p.id,
+    player: { id: p.id, name: p.name, x: p.x, y: p.y, z: p.z, hp: p.hp, cash: p.cash },
+    time: Date.now(),
+    wave,
+    betweenRounds,
+  });
+
+
+// .dzs hook: playerSpawn
+try {
+  runScriptEvent('playerSpawn', { player: p, time: Date.now() });
+} catch (e) {}
 
   ws.send(JSON.stringify({
     type:"welcome",
@@ -1030,6 +1002,11 @@ function handleConnection(ws){
     try { msg = JSON.parse(raw.toString()); } catch { return; }
     const me = players.get(id);
     if (!me) return;
+
+    if (msg.type === "getDzsHelp"){
+      try{ ws.send(JSON.stringify({ type:"dzsHelp", help: dzs?.getHelp?.() || null })); }catch(_e){}
+      return;
+    }
 
     if (msg.type === "input"){
       // Server integrates based on inputs, but accept latest yaw/pitch
@@ -1067,7 +1044,8 @@ function handleConnection(ws){
       if (!PISTOL_LIST.includes(msg.weapon)) return;
       if (!betweenRounds && wave>1) return; // only between rounds or before first wave
       me.pistol = weaponStateFor(msg.weapon);
-      broadcast({ type:"loadout", id:me.id, pistol: me.pistol });
+      if (me.inventory?.weapons?.pistol) me.inventory.weapons.pistol.id = me.pistol.id;
+      broadcast({ type:"loadout", id:me.id, pistol: me.pistol, inventory: me.inventory });
     }
 
 
@@ -1099,10 +1077,30 @@ function handleConnection(ws){
       if (!w) return;
       if (w.slot === "primary"){
         me.primary = weaponStateFor(wid);
-        broadcast({ type:"loadout", id:me.id, primary: me.primary });
+        if (me.inventory?.weapons?.primary) me.inventory.weapons.primary.id = me.primary.id;
+        broadcast({ type:"loadout", id:me.id, primary: me.primary, inventory: me.inventory });
       } else if (w.slot === "pistol"){
         me.pistol = weaponStateFor(wid);
-        broadcast({ type:"loadout", id:me.id, pistol: me.pistol });
+        if (me.inventory?.weapons?.pistol) me.inventory.weapons.pistol.id = me.pistol.id;
+        broadcast({ type:"loadout", id:me.id, pistol: me.pistol, inventory: me.inventory });
+      }
+    }
+
+    if (msg.type === "devGiveWeapon"){
+      if (!DEV_ALLOW_MIDROUND) return;
+      const wid = msg.weapon;
+      const w = WEAPONS[wid];
+      if (!w) return;
+      // "Give" adds the weapon to the appropriate slot without changing the client's active slot.
+      // (The client decides what slot is active; the server is authoritative over inventory.)
+      if (w.slot === "primary"){
+        me.primary = weaponStateFor(wid);
+        if (me.inventory?.weapons?.primary) me.inventory.weapons.primary.id = me.primary.id;
+        broadcast({ type:"loadout", id:me.id, primary: me.primary, inventory: me.inventory });
+      } else if (w.slot === "pistol"){
+        me.pistol = weaponStateFor(wid);
+        if (me.inventory?.weapons?.pistol) me.inventory.weapons.pistol.id = me.pistol.id;
+        broadcast({ type:"loadout", id:me.id, pistol: me.pistol, inventory: me.inventory });
       }
     }
 
@@ -1133,13 +1131,36 @@ function handleConnection(ws){
         return;
       }
       applyPrimaryPick(me, msg.weapon);
-      broadcast({ type:"loadout", id:me.id, primary: me.primary, cash: me.cash, wave });
+      broadcast({ type:"loadout", id:me.id, primary: me.primary, inventory: me.inventory, cash: me.cash, wave });
     }
 
     if (msg.type === "ready"){
       if (!betweenRounds) return;
       // start wave when any player ready; you can refine to require all players
-      startNextWave();
+      if (startNextWaveFn) startNextWaveFn();
+    }
+
+    if (msg.type === "restart"){
+      // Player requested a full restart (default on death popup)
+      if (playerLifecycle) playerLifecycle.restartMatch(`Restarted by ${me.name || me.id}`);
+      if (hud) hud.clearAll();
+      return;
+    }
+
+    if (msg.type === "useMedkit"){
+      // Consumable medkit from inventory (Phase 1).
+      const slot = me.inventory?.equipment?.medkit;
+      if (!slot || slot.count <= 0){
+        ws.send(JSON.stringify({ type:"toast", msg:"No medkits." }));
+        return;
+      }
+      if (me.hp >= 100){
+        ws.send(JSON.stringify({ type:"toast", msg:"HP already full." }));
+        return;
+      }
+      slot.count -= 1;
+      me.hp = clamp(me.hp + 35, 0, 100);
+      broadcast({ type:"loadout", id:me.id, inventory: me.inventory, hp: me.hp });
     }
 
     if (msg.type === "buy"){
@@ -1150,54 +1171,30 @@ function handleConnection(ws){
       if (!cost) return;
       if (me.cash < cost){ ws.send(JSON.stringify({ type:"toast", msg:"Not enough cash." })); return; }
       me.cash -= cost;
-      if (item==="medkit") me.hp = clamp(me.hp + 35, 0, 100);
+      if (item==="medkit"){
+        const slot = me.inventory?.equipment?.medkit;
+        if (!slot){ ws.send(JSON.stringify({ type:"toast", msg:"Medkit slot missing." })); return; }
+        if (slot.count >= slot.max){
+          me.cash += cost; // refund
+          ws.send(JSON.stringify({ type:"toast", msg:`Medkits full (${slot.max}).` }));
+          return;
+        }
+        slot.count += 1;
+      }
       if (item==="armor") me.armor = clamp(me.armor + 0.25, 0, 0.6);
       if (item==="speed") me.speed = clamp(me.speed + 0.9, PLAYER.speed, PLAYER.speed*1.8);
-      broadcast({ type:"bought", id:me.id, item, cash:me.cash, hp:me.hp, armor:me.armor, speed:me.speed });
+      broadcast({ type:"bought", id:me.id, item, cash:me.cash, hp:me.hp, armor:me.armor, speed:me.speed, inventory: me.inventory });
     }
   });
 
   ws.on("close", () => {
     players.delete(id);
+    wsByPlayerId.delete(id);
     broadcast({ type:"leave", id });
   });
 }
 
-function integratePlayers(){
-  for (const p of players.values()){
-    const k = p._keys || {};
-    const forward = (k.w ? 1 : 0) + (k.s ? -1 : 0); // w=forward, s=back
-    const strafe  = (k.d ? 1 : 0) + (k.a ? -1 : 0); // d=right, a=left
 
-    // Movement is relative to view yaw (FPS-style)
-    // Three.js camera forward at yaw=0 is -Z, so forward vector is (-sin(yaw), -cos(yaw))
-    const sy = Math.sin(p.yaw);
-    const cy = Math.cos(p.yaw);
-    const fx = -sy, fz = -cy;
-    const rx =  cy, rz = -sy;
-
-    let vx = fx * forward + rx * strafe;
-    let vz = fz * forward + rz * strafe;
-
-    const mag = Math.hypot(vx, vz);
-    if (mag > 0){
-      vx /= mag; vz /= mag;
-      p.x += vx * p.speed * DT;
-      p.z += vz * p.speed * DT;
-      arenaClamp(p);
-      resolveObstacleCollisionsFor(p, PLAYER.radius);
-      arenaClamp(p);
-    }
-
-    // simple respawn if down and betweenRounds
-    if (p.hp<=0 && betweenRounds){
-      p.hp = 100;
-      p.x = rand(-8,8);
-      p.z = rand(-8,8);
-      p.cash = Math.max(p.cash, 10);
-    }
-  }
-}
 
 
 // TICK_LOOP_REMOVED
@@ -1205,20 +1202,41 @@ function integratePlayers(){
 
 // Replaced tick loop. Uses the same ordering as v16.
 function tick(){
-  integratePlayers();
-  spawnLogic();
-  updateZombies();
+  // Wired module functions (set in createZMServer)
+  if (integratePlayersFn) integratePlayersFn();
+  if (spawnLogicFn) spawnLogicFn();
+  if (updateZombiesFn) updateZombiesFn();
   resolveCollisions();
   combat.tickBurstFire();
 
-  broadcast({
-    type:'state',
-    round: { between: betweenRounds, wave, zombiesTarget, zombiesSpawned, zombiesKilled },
-    players: Array.from(players.values()).map(snapshotFor),
-    zombies,
-    pickups: PICKUPS,
-  });
+  // Stream script HUD updates (only when dirty).
+  if (hud) hud.flush();
+
+  // .dzs hook: tick
+  try { runScriptEvent('tick', { time: Date.now() }); } catch (e) {}
+
+  // End-of-wave condition:
+  // Only end the wave once we've spawned the full quota AND all zombies are dead.
+  // This prevents premature wave endings if a wave starts with a low initial spawn.
+  if (!betweenRounds && zombiesTarget > 0 && zombiesSpawned >= zombiesTarget && zombiesKilled >= zombiesTarget && zombies.length === 0){
+    if (endWaveFn) endWaveFn();
+  }
+
+  // Snapshot broadcast (authoritative world state).
+  // Throttled so clients stay responsive without spamming bandwidth.
+  tick._snapCounter = (tick._snapCounter || 0) + 1;
+  const SNAP_EVERY = 3; // ~20Hz if TICK_HZ=60
+  if ((tick._snapCounter % SNAP_EVERY) === 0){
+    broadcast({
+      type:'snapshot',
+      round: { between: betweenRounds, wave, zombiesTarget, zombiesSpawned, zombiesKilled },
+      players: Array.from(players.values()).map(snapshotFor),
+      zombies,
+      pickups: PICKUPS,
+    });
+  }
 }
+
 
 function startTickLoop(){
   if (_tickHandle) return;
@@ -1230,9 +1248,122 @@ function startTickLoop(){
     }
   }, 1000 / TICK_HZ);
 }
-
 function createZMServer(opts){
   clients = opts.clients || clients;
+
+  // HUD system (server -> client overlay), available to custom scripts.
+  hud = createHudSystem({ sendTo });
+
+  // DZS engine (parser moved out of zmServer.js)
+  dzs = createDzsEngine({
+    baseDir: __dirname,
+    arena: ARENA,
+    obstacles: OBSTACLES,
+    pickups: PICKUPS,
+    players,
+    weapons: WEAPONS,
+    hud,
+    getWave: () => wave,
+    log: (...a) => console.log(...a),
+  });
+  runScriptEvent = dzs.runScriptEvent;
+  loadScript = dzs.loadScript;
+  loadAllDzs = dzs.loadAllDzs;
+
+  // Auto-load all .dzs scripts from supported directories (scripts/, ../../scripts/, customscripts/)
+  try { loadAllDzs(); } catch (e){ console.warn('[dzs] autoload failed:', e?.message || e); }
+
+
+  // Modularized logic (players + zombies)
+  const playerLogic = createPlayerLogic({
+    players,
+    ARENA,
+    PLAYER,
+    DT,
+    rand,
+    arenaClamp,
+    resolveObstacleCollisionsFor,
+    obstacles: OBSTACLES,
+    getBetweenRounds: () => betweenRounds,
+  });
+
+  // Player lifecycle (death handling + match restart)
+  playerLifecycle = createPlayerLifecycle({
+    players,
+    zombies,
+    PICKUPS,
+    PLAYER,
+    rand,
+    broadcast,
+    sendTo,
+    snapshotFor,
+    weaponStateFor,
+    PISTOL_LIST,
+    makeDefaultInventory,
+    ARENA,
+    obstacles: OBSTACLES,
+    spawnAnchor: PLAYER_SPAWN_ANCHOR,
+    // round state accessors
+    getWave: () => wave,
+    setWave: (v) => { wave = v; },
+    getBetweenRounds: () => betweenRounds,
+    setBetweenRounds: (v) => { betweenRounds = !!v; },
+    setZombiesTarget: (v) => { zombiesTarget = v; },
+    setZombiesSpawned: (v) => { zombiesSpawned = v; },
+    setZombiesKilled: (v) => { zombiesKilled = v; },
+    setLastSpawnAt: (v) => { lastSpawnAt = v; },
+  });
+
+  const zombieLogic = createZombieLogic({
+    zombies,
+    players,
+    ARENA,
+    PLAYER,
+    ZOMBIE,
+    DT,
+    rand,
+    uid,
+    resolveObstacleCollisionsFor,
+    nearestPlayer: playerLogic.nearestPlayer,
+    broadcast,
+    emitGameEvent: emitJSEvent,
+    clamp,
+
+    // shared round state accessors
+    getWave: () => wave,
+    setWave: (v) => { wave = v; },
+    getBetweenRounds: () => betweenRounds,
+    setBetweenRounds: (v) => { betweenRounds = !!v; },
+    getZombiesTarget: () => zombiesTarget,
+    setZombiesTarget: (v) => { zombiesTarget = v; },
+    getZombiesSpawned: () => zombiesSpawned,
+    setZombiesSpawned: (v) => { zombiesSpawned = v; },
+    setZombiesKilled: (v) => { zombiesKilled = v; },
+    getSpawnEveryMs: () => spawnEveryMs,
+    setSpawnEveryMs: (v) => { spawnEveryMs = v; },
+    getLastSpawnAt: () => lastSpawnAt,
+    setLastSpawnAt: (v) => { lastSpawnAt = v; },
+    setRoundStartAt: (v) => { roundStartAt = v; },
+
+    // default death behavior: prompt restart
+    onPlayerDeathDefault: (pid, cause) => {
+      try {
+        const pl = players.get(pid);
+        runScriptEvent('playerDeath', { player: pl || { id: pid }, time: Date.now(), cause });
+      } catch (e) {}
+      if (playerLifecycle) playerLifecycle.handlePlayerDeath(pid, cause);
+    },
+  });
+
+  const { nearestPlayer, lineHitsPlayer, integratePlayers } = playerLogic;
+  const { spawnZombie, updateZombies, startNextWave, endWave, spawnLogic } = zombieLogic;
+
+  // Wire module APIs for the tick loop and WS handlers.
+  integratePlayersFn = integratePlayers;
+  spawnLogicFn = spawnLogic;
+  updateZombiesFn = updateZombies;
+  startNextWaveFn = startNextWave;
+  endWaveFn = endWave;
 
   // Create engine combat pipeline that can notify scripts.
   combat = createCombatSystem({
@@ -1242,9 +1373,11 @@ function createZMServer(opts){
     getPlayers: () => players,
     broadcast,
     runScriptEvent,
+    emitGameEvent: emitJSEvent,
     getWave: () => wave,
     endWave,
     getBetweenRounds: () => betweenRounds,
+    onZombieKilled: () => { zombiesKilled += 1; },
     clamp,
   });
 
@@ -1259,6 +1392,19 @@ function createZMServer(opts){
   }
 
   startTickLoop();
+  emitJSEvent('onGameStart', { time: Date.now(), wave, betweenRounds });
+  try { runScriptEvent('gameStart', { time: Date.now() }); } catch (e) {}
+
+  // Best-effort shutdown hooks for onGameEnd.
+  if (!global.__ZM_GAME_END_HOOKS_INSTALLED){
+    global.__ZM_GAME_END_HOOKS_INSTALLED = true;
+    const end = (reason) => {
+      try { emitJSEvent('onGameEnd', { time: Date.now(), reason, wave, betweenRounds }); } catch {}
+    };
+    process.once('SIGINT', () => { end('SIGINT'); process.exit(0); });
+    process.once('SIGTERM', () => { end('SIGTERM'); process.exit(0); });
+    process.once('exit', () => { end('exit'); });
+  }
   return { handleConnection };
 }
 

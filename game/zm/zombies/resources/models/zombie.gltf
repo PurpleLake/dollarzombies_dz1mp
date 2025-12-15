@@ -1,0 +1,1389 @@
+{
+  "asset": {
+    "generator": "Characters3d.com",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "buffers": [
+    {
+      "byteLength": 455296,
+      "uri": "buffer.bin"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 55440,
+      "byteStride": 12,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 55440,
+      "byteOffset": 55440,
+      "byteStride": 12,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 73920,
+      "byteOffset": 110880,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 36960,
+      "byteOffset": 184800,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 36960,
+      "byteOffset": 221760,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 36960,
+      "byteOffset": 258720,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 45408,
+      "byteOffset": 295680,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 3328,
+      "byteOffset": 341088
+    },
+    {
+      "buffer": 0,
+      "byteLength": 36960,
+      "byteOffset": 344416,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 73920,
+      "byteOffset": 381376,
+      "target": 34962
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Characters3d.com Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 4620,
+      "max": [
+        64.620681762695313,
+        191.22862243652344,
+        9.9049110412597656
+      ],
+      "min": [
+        -64.620681762695313,
+        -1.7337925434112549,
+        -42.555290222167969
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 4620,
+      "max": [
+        0.99999916553497314,
+        1.0,
+        0.99999666213989258
+      ],
+      "min": [
+        -0.99999916553497314,
+        -0.99998795986175537,
+        -1.0
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 4620,
+      "max": [
+        1.0,
+        0.99944227933883667,
+        1.0,
+        1.0
+      ],
+      "min": [
+        -1.0,
+        -1.0,
+        -1.0,
+        -1.0
+      ],
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 4620,
+      "max": [
+        0.95515346527099609,
+        0.98925983905792236
+      ],
+      "min": [
+        0.0038307223003357649,
+        0.00383073091506958
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5126,
+      "count": 4620,
+      "max": [
+        0.95515346527099609,
+        0.98925983905792236
+      ],
+      "min": [
+        0.0038307223003357649,
+        0.00383073091506958
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 4620,
+      "max": [
+        0.95515346527099609,
+        0.99616926908493042
+      ],
+      "min": [
+        0.0038307223003357649,
+        0.010740160942077637
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5123,
+      "count": 22704,
+      "max": [
+        4619.0
+      ],
+      "min": [
+        0.0
+      ],
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5126,
+      "count": 52,
+      "type": "MAT4"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5123,
+      "count": 4620,
+      "max": [
+        51.0,
+        51.0,
+        51.0,
+        48.0
+      ],
+      "min": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5126,
+      "count": 4620,
+      "max": [
+        1.0,
+        0.49856498837471008,
+        0.27793416380882263,
+        0.21455752849578857
+      ],
+      "min": [
+        0.31479156017303467,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "type": "VEC4"
+    }
+  ],
+  "images": [
+    {
+      "uri": "zombie1_normal_2.png",
+      "name": "zombie1_normal_2"
+    },
+    {
+      "uri": "zombie1_diffuse_0.png",
+      "name": "zombie1_diffuse_0"
+    }
+  ],
+  "materials": [
+    {
+      "name": "zombie1_0",
+      "normalTexture": {
+        "index": 0
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.55278640985488892
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TANGENT": 2,
+            "TEXCOORD_0": 3,
+            "TEXCOORD_1": 4,
+            "TEXCOORD_2": 5,
+            "JOINTS_0": 8,
+            "WEIGHTS_0": 9
+          },
+          "indices": 6,
+          "material": 0
+        }
+      ],
+      "name": "mesh_zombie1"
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Zombie",
+      "children": [
+        1,
+        66
+      ]
+    },
+    {
+      "name": "characters3d.com___Hips",
+      "children": [
+        2,
+        7,
+        12
+      ],
+      "rotation": [
+        1.21925922E-07,
+        -6.53347229E-07,
+        2.16285334E-05,
+        1.0
+      ],
+      "translation": [
+        -2.14979059E-06,
+        1.08703911,
+        -0.00226059975
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Upper_Leg",
+      "children": [
+        3
+      ],
+      "rotation": [
+        0.00336852274,
+        -0.0226272289,
+        -0.999735653,
+        0.002303196
+      ],
+      "translation": [
+        0.105991282,
+        -0.0493145734,
+        0.000105686187
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Lower_Leg",
+      "children": [
+        4
+      ],
+      "rotation": [
+        -0.0742884055,
+        0.000166122467,
+        -0.004971523,
+        0.9972244
+      ],
+      "translation": [
+        1.15142051E-09,
+        0.470392019,
+        1.61303429E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Foot",
+      "children": [
+        5
+      ],
+      "rotation": [
+        0.5486202,
+        0.0609169565,
+        0.03990376,
+        0.832894146
+      ],
+      "translation": [
+        -1.13286469E-09,
+        0.47692287,
+        3.7789647E-09
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Toes",
+      "children": [
+        6
+      ],
+      "rotation": [
+        0.24808073,
+        -0.0541474633,
+        0.0138895521,
+        0.9671252
+      ],
+      "translation": [
+        2.84931578E-10,
+        0.190464184,
+        -1.72571468E-09
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Toes_Tip",
+      "translation": [
+        8.71724E-11,
+        0.07955491,
+        -1.94476484E-11
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Upper_Leg",
+      "children": [
+        8
+      ],
+      "rotation": [
+        -0.003633347,
+        -0.0197852124,
+        -0.9997949,
+        -0.002341213
+      ],
+      "translation": [
+        -0.105991282,
+        -0.0493145734,
+        0.00130081177
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Lower_Leg",
+      "children": [
+        9
+      ],
+      "rotation": [
+        -0.06994102,
+        -0.000147871964,
+        0.00497785676,
+        0.9975387
+      ],
+      "translation": [
+        -1.34379419E-09,
+        0.470474929,
+        5.13627751E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Foot",
+      "children": [
+        10
+      ],
+      "rotation": [
+        0.546524167,
+        -0.06099942,
+        -0.0399806,
+        0.8342613
+      ],
+      "translation": [
+        4.883039E-09,
+        0.4765615,
+        -1.25086408E-09
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Toes",
+      "children": [
+        11
+      ],
+      "rotation": [
+        0.249077722,
+        0.0546639338,
+        -0.0140825855,
+        0.966837049
+      ],
+      "translation": [
+        -5.106759E-10,
+        0.189773351,
+        -2.70676437E-09
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Toes_Tip",
+      "translation": [
+        -1.12810525E-10,
+        0.08035725,
+        -4.798102E-12
+      ]
+    },
+    {
+      "name": "characters3d.com___Spine",
+      "children": [
+        13
+      ],
+      "rotation": [
+        0.0149056,
+        3.30898359E-07,
+        -2.163587E-05,
+        0.9998889
+      ],
+      "translation": [
+        0.0,
+        0.0886178538,
+        0.00264270767
+      ]
+    },
+    {
+      "name": "characters3d.com___Chest",
+      "children": [
+        14
+      ],
+      "rotation": [
+        1.73472348E-18,
+        2.22812677E-14,
+        -6.83088568E-13,
+        1.0
+      ],
+      "translation": [
+        0.0,
+        0.103433251,
+        1.28980548E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___Upper_Chest",
+      "children": [
+        15,
+        39,
+        42
+      ],
+      "rotation": [
+        1.73472348E-18,
+        0.0,
+        -4.506368E-29,
+        1.0
+      ],
+      "translation": [
+        0.0,
+        0.118209571,
+        5.528193E-11
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Shoulder",
+      "children": [
+        16
+      ],
+      "rotation": [
+        0.561431468,
+        0.4324937,
+        -0.5547958,
+        0.4358274
+      ],
+      "translation": [
+        0.060194917,
+        0.107017159,
+        0.000916535442
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Upper_Arm",
+      "children": [
+        17
+      ],
+      "rotation": [
+        -0.123756729,
+        0.02739403,
+        -0.008610321,
+        0.991897047
+      ],
+      "translation": [
+        5.95067259E-11,
+        0.132420138,
+        -1.2576481E-09
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Lower_Arm",
+      "children": [
+        18
+      ],
+      "rotation": [
+        1.71715712E-07,
+        0.00772123225,
+        -2.013921E-07,
+        0.9999702
+      ],
+      "translation": [
+        5.452233E-10,
+        0.239311084,
+        -2.34805E-09
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Hand",
+      "children": [
+        19,
+        23,
+        27,
+        31,
+        35
+      ],
+      "rotation": [
+        0.0294039,
+        -0.09615231,
+        -0.0508629978,
+        0.9936313
+      ],
+      "translation": [
+        -5.53395063E-09,
+        0.251016259,
+        4.597414E-09
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Index_Proximal",
+      "children": [
+        20
+      ],
+      "rotation": [
+        -0.02382122,
+        -0.0179376137,
+        0.0784986541,
+        0.9964682
+      ],
+      "translation": [
+        -0.0437200665,
+        0.142016575,
+        -0.000528664037
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Index_Intermediate",
+      "children": [
+        21
+      ],
+      "rotation": [
+        3.41031155E-05,
+        0.002194689,
+        -0.033723373,
+        0.9994288
+      ],
+      "translation": [
+        0.00187643094,
+        0.0380028747,
+        -9.474143E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Index_Distal",
+      "children": [
+        22
+      ],
+      "rotation": [
+        3.31651827E-05,
+        -0.00118432683,
+        -0.009763175,
+        0.999951661
+      ],
+      "translation": [
+        -0.0006495463,
+        0.03583845,
+        1.998253E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Index_Distal_Tip",
+      "translation": [
+        -0.00122688548,
+        0.0325639546,
+        -1.48715887E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Little_Proximal",
+      "children": [
+        24
+      ],
+      "rotation": [
+        -0.0239594448,
+        -0.07764896,
+        0.104545966,
+        0.9911946
+      ],
+      "translation": [
+        0.0441894233,
+        0.115162767,
+        -0.007204455
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Little_Intermediate",
+      "children": [
+        25
+      ],
+      "rotation": [
+        0.000311064476,
+        0.00773151359,
+        -0.059094727,
+        0.9982224
+      ],
+      "translation": [
+        0.00339207076,
+        0.0340396725,
+        -4.121391E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Little_Distal",
+      "children": [
+        26
+      ],
+      "rotation": [
+        0.000771712745,
+        -0.0106527153,
+        -0.05334978,
+        0.998518765
+      ],
+      "translation": [
+        -0.0005334878,
+        0.0281347539,
+        9.54285E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Little_Distal_Tip",
+      "translation": [
+        -0.00285858265,
+        0.0226249173,
+        5.753562E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Middle_Proximal",
+      "children": [
+        28
+      ],
+      "rotation": [
+        -0.02418754,
+        -0.0124886017,
+        0.09554218,
+        0.9950531
+      ],
+      "translation": [
+        -0.0149754267,
+        0.139334828,
+        -0.00682564126
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Middle_Intermediate",
+      "children": [
+        29
+      ],
+      "rotation": [
+        0.000130399887,
+        0.00570885744,
+        -0.0608315,
+        0.998131752
+      ],
+      "translation": [
+        0.00369235477,
+        0.0439595059,
+        6.92436553E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Middle_Distal",
+      "children": [
+        30
+      ],
+      "rotation": [
+        0.0001282983,
+        -0.002541611,
+        -0.0124978907,
+        0.9999187
+      ],
+      "translation": [
+        -0.0014456769,
+        0.0380825661,
+        1.34299483E-09
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Middle_Distal_Tip",
+      "translation": [
+        -0.002246679,
+        0.03564906,
+        -1.53659016E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Ring_Proximal",
+      "children": [
+        32
+      ],
+      "rotation": [
+        -0.0238295849,
+        -0.0331515037,
+        0.09277911,
+        0.9948493
+      ],
+      "translation": [
+        0.0145061156,
+        0.127728119,
+        -0.008358435
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Ring_Intermediate",
+      "children": [
+        33
+      ],
+      "rotation": [
+        0.000216095839,
+        0.007787043,
+        -0.0495182,
+        0.9987428
+      ],
+      "translation": [
+        0.00298017566,
+        0.0384649523,
+        4.71196E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Ring_Distal",
+      "children": [
+        34
+      ],
+      "rotation": [
+        0.000203875068,
+        -0.004762046,
+        -0.021057805,
+        0.9997669
+      ],
+      "translation": [
+        -0.000825018564,
+        0.03790484,
+        -4.13663132E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Ring_Distal_Tip",
+      "translation": [
+        -0.0021551596,
+        0.0336886868,
+        -3.09609477E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Thumb_Proximal",
+      "children": [
+        36
+      ],
+      "rotation": [
+        0.2414124,
+        0.0152202593,
+        0.167247161,
+        0.955780745
+      ],
+      "translation": [
+        -0.02085988,
+        0.04627758,
+        0.0235688426
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Thumb_Intermediate",
+      "children": [
+        37
+      ],
+      "rotation": [
+        0.00106330623,
+        -0.009784785,
+        0.08429074,
+        0.9963926
+      ],
+      "translation": [
+        -0.008573409,
+        0.0439445972,
+        4.42990616E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Thumb_Distal",
+      "children": [
+        38
+      ],
+      "rotation": [
+        -0.00171136193,
+        -0.0150992982,
+        0.1362963,
+        0.9905516
+      ],
+      "translation": [
+        -0.00105742225,
+        0.0442635231,
+        9.989286E-11
+      ]
+    },
+    {
+      "name": "characters3d.com___L_Thumb_Distal_Tip",
+      "translation": [
+        0.009630825,
+        0.0377806053,
+        7.500419E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___Neck",
+      "children": [
+        40
+      ],
+      "rotation": [
+        -0.0149056818,
+        -4.601734E-14,
+        -2.26713017E-13,
+        0.9998889
+      ],
+      "translation": [
+        0.0,
+        0.132985726,
+        5.965532E-09
+      ]
+    },
+    {
+      "name": "characters3d.com___Head",
+      "children": [
+        41
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        -2.31914268E-31,
+        1.0
+      ],
+      "translation": [
+        0.0,
+        0.09557632,
+        0.007773752
+      ]
+    },
+    {
+      "name": "characters3d.com___Head_Tip",
+      "translation": [
+        0.0,
+        0.228956446,
+        0.0186222922
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Shoulder",
+      "children": [
+        43
+      ],
+      "rotation": [
+        0.560013,
+        -0.4332539,
+        0.5562806,
+        0.4350039
+      ],
+      "translation": [
+        -0.060194917,
+        0.107008696,
+        0.0006325621
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Upper_Arm",
+      "children": [
+        44
+      ],
+      "rotation": [
+        -0.12389303,
+        -0.0282352325,
+        0.006392523,
+        0.9918732
+      ],
+      "translation": [
+        -3.99805779E-11,
+        0.132420123,
+        -1.11881493E-09
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Lower_Arm",
+      "children": [
+        45
+      ],
+      "rotation": [
+        3.50617086E-07,
+        -0.00755203841,
+        4.26218953E-08,
+        0.9999715
+      ],
+      "translation": [
+        -8.5373314E-10,
+        0.239560261,
+        4.68574468E-09
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Hand",
+      "children": [
+        46,
+        50,
+        54,
+        58,
+        62
+      ],
+      "rotation": [
+        0.0277504735,
+        0.09573149,
+        0.049587477,
+        0.993783951
+      ],
+      "translation": [
+        -4.73362238E-09,
+        0.250566661,
+        -3.91465349E-09
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Index_Proximal",
+      "children": [
+        47
+      ],
+      "rotation": [
+        -0.0223280638,
+        0.0174018368,
+        -0.07484044,
+        0.9967937
+      ],
+      "translation": [
+        0.0414823145,
+        0.141524822,
+        -0.000215580745
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Index_Intermediate",
+      "children": [
+        48
+      ],
+      "rotation": [
+        1.40214015E-05,
+        -0.00139766047,
+        0.03485371,
+        0.9993915
+      ],
+      "translation": [
+        -0.00168168335,
+        0.0373954028,
+        -2.041321E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Index_Distal",
+      "children": [
+        49
+      ],
+      "rotation": [
+        7.824558E-06,
+        0.000295426842,
+        0.000322921958,
+        0.99999994
+      ],
+      "translation": [
+        0.000885918,
+        0.0357581377,
+        -2.312673E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Index_Distal_Tip",
+      "translation": [
+        0.0007957661,
+        0.0313087068,
+        -2.058239E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Little_Proximal",
+      "children": [
+        51
+      ],
+      "rotation": [
+        -0.0241083931,
+        0.03602673,
+        -0.1397226,
+        0.989241362
+      ],
+      "translation": [
+        -0.0382572152,
+        0.103525296,
+        -0.005117029
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Little_Intermediate",
+      "children": [
+        52
+      ],
+      "rotation": [
+        0.00150080549,
+        -0.021860756,
+        0.105992,
+        0.994125545
+      ],
+      "translation": [
+        -0.00705910148,
+        0.0399767756,
+        2.01321335E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Little_Distal",
+      "children": [
+        53
+      ],
+      "rotation": [
+        0.00356507883,
+        0.0294288564,
+        0.08276421,
+        0.996128142
+      ],
+      "translation": [
+        0.00119492679,
+        0.0317171775,
+        3.664546E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Little_Distal_Tip",
+      "translation": [
+        0.0058641783,
+        0.0284238923,
+        1.45941392E-09
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Middle_Proximal",
+      "children": [
+        55
+      ],
+      "rotation": [
+        -0.0227566212,
+        0.008252503,
+        -0.0943563655,
+        0.9952442
+      ],
+      "translation": [
+        0.0140737342,
+        0.134620219,
+        -0.00618734
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Middle_Intermediate",
+      "children": [
+        56
+      ],
+      "rotation": [
+        0.000138605377,
+        -0.005692991,
+        0.06017069,
+        0.998171866
+      ],
+      "translation": [
+        -0.003608154,
+        0.0425888561,
+        1.99258055E-09
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Middle_Distal",
+      "children": [
+        57
+      ],
+      "rotation": [
+        0.000100210695,
+        0.00211934117,
+        0.0114565818,
+        0.99993217
+      ],
+      "translation": [
+        0.00144038943,
+        0.0400933176,
+        1.57258956E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Middle_Distal_Tip",
+      "translation": [
+        0.00216776319,
+        0.03681902,
+        8.15679954E-11
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Ring_Proximal",
+      "children": [
+        59
+      ],
+      "rotation": [
+        -0.0224574488,
+        0.03697636,
+        -0.0948891044,
+        0.994547367
+      ],
+      "translation": [
+        -0.0172988251,
+        0.127770379,
+        -0.008779971
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Ring_Intermediate",
+      "children": [
+        60
+      ],
+      "rotation": [
+        0.000202314986,
+        -0.00752725732,
+        0.057543572,
+        0.9983146
+      ],
+      "translation": [
+        -0.00341784954,
+        0.04040367,
+        4.3209096E-11
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Ring_Distal",
+      "children": [
+        61
+      ],
+      "rotation": [
+        0.0002363829,
+        0.004623696,
+        0.0204152111,
+        0.9997809
+      ],
+      "translation": [
+        0.0011355764,
+        0.03692043,
+        1.25185851E-09
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Ring_Distal_Tip",
+      "translation": [
+        0.00228227163,
+        0.0318201855,
+        -1.56954158E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Thumb_Proximal",
+      "children": [
+        63
+      ],
+      "rotation": [
+        0.240570053,
+        -0.0186730381,
+        -0.175312728,
+        0.954485655
+      ],
+      "translation": [
+        0.02019921,
+        0.04499112,
+        0.0221103169
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Thumb_Intermediate",
+      "children": [
+        64
+      ],
+      "rotation": [
+        0.00109402183,
+        0.0109408367,
+        -0.07701443,
+        0.996969342
+      ],
+      "translation": [
+        0.00760071,
+        0.04256422,
+        9.136855E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Thumb_Distal",
+      "children": [
+        65
+      ],
+      "rotation": [
+        -0.000952488161,
+        0.0104225744,
+        -0.113383308,
+        0.9934962
+      ],
+      "translation": [
+        0.001011189,
+        0.0448770933,
+        -2.32323175E-10
+      ]
+    },
+    {
+      "name": "characters3d.com___R_Thumb_Distal_Tip",
+      "translation": [
+        -0.008611897,
+        0.04147288,
+        1.0977793E-10
+      ]
+    },
+    {
+      "name": "Zombie",
+      "children": [
+        67
+      ],
+      "rotation": [
+        -6.123234E-17,
+        -1.0,
+        -6.123234E-17,
+        6.123234E-17
+      ],
+      "scale": [
+        0.0095757,
+        0.0095757,
+        0.0095757
+      ]
+    },
+    {
+      "name": "mesh_zombie1",
+      "mesh": 0,
+      "scale": [
+        1.0,
+        0.999999762,
+        0.999999762
+      ],
+      "skin": 0
+    }
+  ],
+  "samplers": [
+    {
+      "minFilter": 9987
+    }
+  ],
+  "skins": [
+    {
+      "inverseBindMatrices": 7,
+      "joints": [
+        39,
+        40,
+        14,
+        15,
+        13,
+        16,
+        12,
+        1,
+        2,
+        18,
+        17,
+        23,
+        24,
+        31,
+        21,
+        28,
+        29,
+        35,
+        36,
+        37,
+        32,
+        33,
+        25,
+        27,
+        19,
+        20,
+        5,
+        3,
+        4,
+        7,
+        42,
+        43,
+        44,
+        45,
+        50,
+        48,
+        47,
+        55,
+        56,
+        62,
+        63,
+        64,
+        59,
+        60,
+        51,
+        52,
+        46,
+        54,
+        58,
+        10,
+        9,
+        8
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "name": "zombie1_normal_2",
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "name": "zombie1_diffuse_0",
+      "sampler": 0,
+      "source": 1
+    }
+  ]
+}
