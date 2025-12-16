@@ -1,32 +1,277 @@
-// server.js (bootstrap)
-// Starts the engine server core and mounts the Zombies (zm) game module.
+// Minimal static server for the 3D FPS engine (no build tools).
+// Run: node server.js  then open http://localhost:3000
+import http from "http";
+import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+import url from "url";
 
-const path = require('path');
-const { startServer } = require('./engine/server/serverCore');
-const { createZMServer } = require('./game/zm/zmServer');
+const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+const PORT = process.env.PORT || 3000;
 
-const publicDir = path.join(__dirname, 'public');
-const engineDir = path.join(__dirname, 'engine');
-const gameDir = path.join(__dirname, 'game');
+const MIME = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+  ".dzs": "text/plain; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml; charset=utf-8",
+  ".glb": "model/gltf-binary",
+  ".gltf": "model/gltf+json; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
+};
 
-// Create game instance (receives WS client set from engine core).
-let zm = null;
+function safeJoin(root, reqPath) {
+  const clean = reqPath.replace(/\0/g, "");
+  const joined = path.join(root, clean);
+  if (!joined.startsWith(root)) return null;
+  return joined;
+}
 
-startServer({
-  port: 3000,
-  staticMounts: [
-    { urlPrefix: '/', dir: publicDir },
-    { urlPrefix: '/engine/', dir: engineDir },
-    { urlPrefix: '/game/', dir: gameDir },
-  ],
-  onConnection: (ws, ctx) => {
-    try { console.log('[ws] client connected'); } catch {}
-    if (!zm){
-      // IMPORTANT: The game must run without any external script files.
-      // We only load .dzs scripts when explicitly enabled.
-      zm = createZMServer({ clients: ctx.clients, skipDefaultScript: true });
-      try { console.log('[game] ZM server created'); } catch {}
+const server = http.createServer((req, res) => {
+  try {
+    const u = new URL(req.url, `http://${req.headers.host}`);
+    let pathname = decodeURIComponent(u.pathname);
+    if (pathname === "/") pathname = "/public/index.html";
+
+    const filePath = safeJoin(__dirname, pathname);
+    if (!filePath) {
+      res.writeHead(400); res.end("Bad path"); return;
     }
-    zm.handleConnection(ws);
+
+    fs.stat(filePath, (err, st) => {
+      if (err || !st.isFile()) {
+        res.writeHead(404); res.end("Not found"); return;
+      }
+      const ext = path.extname(filePath).toLowerCase();
+      res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
+      fs.createReadStream(filePath).pipe(res);
+    });
+  } catch (e) {
+    res.writeHead(500); res.end(String(e?.stack || e));
   }
 });
+
+
+
+// --- Minimal WebSocket server (no deps) for multiplayer prototypes ---
+const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+function wsAcceptKey(key){
+  return crypto.createHash("sha1").update(key + WS_GUID).digest("base64");
+}
+
+function wsSend(sock, obj){
+  try{
+    const data = Buffer.from(JSON.stringify(obj));
+    const len = data.length;
+    let header;
+    if(len < 126){
+      header = Buffer.from([0x81, len]);
+    } else if(len < 65536){
+      header = Buffer.from([0x81, 126, (len>>8)&255, len&255]);
+    } else {
+      // not expected
+      header = Buffer.from([0x81, 127, 0,0,0,0, (len>>24)&255, (len>>16)&255, (len>>8)&255, len&255]);
+    }
+    sock.write(Buffer.concat([header, data]));
+  } catch {}
+}
+
+function wsClose(sock){
+  try{ sock.end(); } catch {}
+}
+
+function wsParseFrame(buf){
+  if(buf.length < 2) return null;
+  const fin = (buf[0] & 0x80) !== 0;
+  const opcode = buf[0] & 0x0f;
+  const masked = (buf[1] & 0x80) !== 0;
+  let len = buf[1] & 0x7f;
+  let off = 2;
+  if(len === 126){
+    if(buf.length < off+2) return null;
+    len = buf.readUInt16BE(off); off += 2;
+  } else if(len === 127){
+    if(buf.length < off+8) return null;
+    // only low 32 bits supported
+    off += 4;
+    len = buf.readUInt32BE(off); off += 4;
+  }
+  let mask;
+  if(masked){
+    if(buf.length < off+4) return null;
+    mask = buf.slice(off, off+4); off += 4;
+  }
+  if(buf.length < off+len) return null;
+  let payload = buf.slice(off, off+len);
+  const rest = buf.slice(off+len);
+  if(masked){
+    const out = Buffer.alloc(payload.length);
+    for(let i=0;i<payload.length;i++) out[i] = payload[i] ^ mask[i%4];
+    payload = out;
+  }
+  return { fin, opcode, payload, rest };
+}
+
+const netState = {
+  nextId: 1,
+  clients: new Map(), // id -> { sock, name, team, mode, lastSnap }
+};
+
+function assignTeam(mode){
+  // Zombies: all team 0, max 4
+  // MP: alternate team 0/1, target 12
+  if(mode === "mp"){
+    let t0=0,t1=0;
+    for(const c of netState.clients.values()){
+      if(c.mode !== "mp") continue;
+      if(c.team===0) t0++; else if(c.team===1) t1++;
+    }
+    return (t0 <= t1) ? 0 : 1;
+  }
+  return 0;
+}
+
+function canJoin(mode){
+  let count=0;
+  for(const c of netState.clients.values()) if(c.mode===mode) count++;
+  if(mode === "mp") return count < 12;
+  return count < 4;
+}
+
+function broadcastState(){
+  // Send roster snapshot to everyone (each mode sees only same-mode players)
+  for(const [id, c] of netState.clients){
+    const players = [];
+    for(const [oid, o] of netState.clients){
+      if(o.mode !== c.mode) continue;
+      const s = o.lastSnap || {};
+      players.push({
+        id: oid,
+        name: o.name,
+        team: o.team,
+        mode: o.mode,
+        hp: s.hp ?? 100,
+        pos: s.pos ?? {x:0,y:1.7,z:0},
+        rot: s.rot ?? {yaw:0,pitch:0},
+        weaponId: s.weaponId ?? null
+      });
+    }
+    wsSend(c.sock, { t:"state", players });
+  }
+}
+
+// Broadcast at 10hz
+setInterval(broadcastState, 100);
+
+server.on("upgrade", (req, sock) => {
+  try{
+    const u = new URL(req.url, `http://${req.headers.host}`);
+    if(u.pathname !== "/ws"){ sock.destroy(); return; }
+
+    const key = req.headers["sec-websocket-key"];
+    if(!key){ sock.destroy(); return; }
+
+    // handshake
+    const accept = wsAcceptKey(key);
+    const headers = [
+      "HTTP/1.1 101 Switching Protocols",
+      "Upgrade: websocket",
+      "Connection: Upgrade",
+      `Sec-WebSocket-Accept: ${accept}`,
+      "\r\n",
+    ];
+    sock.write(headers.join("\r\n"));
+
+    // register
+    const id = String(netState.nextId++);
+    const name = `Player${id}`;
+    const mode = "zm";
+    const team = assignTeam(mode);
+
+    netState.clients.set(id, { sock, name, team, mode, lastSnap: { pos:{x:0,y:1.7,z:0}, rot:{yaw:0,pitch:0}, hp:100 } });
+    wsSend(sock, { t:"welcome", id, name, team });
+
+    let buffer = Buffer.alloc(0);
+    sock.on("data", (chunk)=>{
+      buffer = Buffer.concat([buffer, chunk]);
+      while(true){
+        const frame = wsParseFrame(buffer);
+        if(!frame) break;
+        buffer = frame.rest;
+
+        if(frame.opcode === 0x8){ // close
+          wsClose(sock);
+          break;
+        }
+        if(frame.opcode !== 0x1) continue; // text only
+        const txt = frame.payload.toString("utf8");
+        let msg;
+        try{ msg = JSON.parse(txt); } catch { continue; }
+
+        const client = netState.clients.get(id);
+        if(!client) continue;
+
+        if(msg.t === "hello"){
+          const desired = msg.mode === "mp" ? "mp" : "zm";
+          if(canJoin(desired)){
+            client.mode = desired;
+            client.team = assignTeam(desired);
+          }
+          wsSend(sock, { t:"welcome", id, name: client.name, team: client.team });
+        } else if(msg.t === "setMode"){
+          const desired = msg.mode === "mp" ? "mp" : "zm";
+          if(canJoin(desired)){
+            client.mode = desired;
+            client.team = assignTeam(desired);
+          }
+          wsSend(sock, { t:"welcome", id, name: client.name, team: client.team });
+        } else if(msg.t === "hit"){
+          // apply hit damage (MP only)
+          if(client.mode !== "mp") continue;
+          const targetId = String(msg.targetId || "");
+          const dmg = Math.max(1, Math.min(200, Number(msg.amount || 20)));
+          const tgt = netState.clients.get(targetId);
+          if(!tgt || tgt.mode !== "mp") continue;
+
+          tgt.lastSnap = tgt.lastSnap || {};
+          const hp0 = Number(tgt.lastSnap.hp ?? 100);
+          const hp1 = Math.max(0, hp0 - dmg);
+          tgt.lastSnap.hp = hp1;
+
+          // notify shooter + victim via lightweight events
+          wsSend(client.sock, { t:"hitConfirm", targetId, amount: dmg, hp: hp1 });
+          wsSend(tgt.sock, { t:"gotHit", attackerId: id, amount: dmg, hp: hp1 });
+          if(hp1 <= 0){
+            // simple respawn to full hp at origin; client will reposition on next spawn tick
+            tgt.lastSnap.hp = 100;
+            wsSend(tgt.sock, { t:"died", attackerId: id });
+            wsSend(client.sock, { t:"killed", targetId });
+          }
+        } else if(msg.t === "snap"){
+          // store last snapshot
+          client.lastSnap = { pos: msg.pos, rot: msg.rot, hp: msg.hp, weaponId: msg.weaponId };
+        }
+      }
+    });
+
+    sock.on("close", ()=>{
+      netState.clients.delete(id);
+    });
+
+    sock.on("end", ()=>{
+      netState.clients.delete(id);
+    });
+  } catch {
+    try{ sock.destroy(); } catch {}
+  }
+});
+
+
+server.listen(PORT, () => console.log(`[server] http://localhost:${PORT}`));

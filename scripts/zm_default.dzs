@@ -1,0 +1,30 @@
+# Default ZM build script (runs on zm:build)
+on zm:build {
+  call log "building world..."
+  call worldClear
+  call addFloor 60
+  call addWalls 60 3
+  call addCrate  0  0  0.5
+  call addCrate -6  4  0.5
+  call addCrate  8 -3  0.5
+
+  call setPlayerSpawn 0 10
+
+  # zombie spawns around the perimeter
+  call addZombieSpawn -20  0
+  call addZombieSpawn  20  0
+  call addZombieSpawn   0 -20
+  call addZombieSpawn   0  20
+
+  call setWaveTarget 10
+  call setSpawnEveryMs 750
+
+  call toast "World built from DZS ✅"
+}
+
+
+on zm:build {
+  // HUD demo (engine DZS builtins)
+  createHudText 0 #ffb450 20 100 WAVE_HUD neon
+  createHudItem 0 #7aa0ff 260 44 20 140 Ammo: 0/0 glow
+}

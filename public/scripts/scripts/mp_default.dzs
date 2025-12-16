@@ -1,0 +1,3 @@
+onGameStart(){
+  iPrintLnBoldAll("^4MULTIPLAYER^7 online (prototype)");
+}
