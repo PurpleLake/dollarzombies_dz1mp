@@ -19,30 +19,36 @@ export class ScriptLoader {
       this._unsubs.push(off);
     };
 
-    route("zm:preload", ["onGamePreload"]);
-    route("zm:build", ["onGameBuild"]);
-    route("zm:start", ["onGameStart"]);
-    route("zm:tick", ["onTick"]);
-    route("zm:waveStart", ["onRoundStart"]);
-    route("zm:waveEnd", ["onRoundEnd"]);
-    route("zm:zombieSpawn", ["onEntitySpawn", "onZombieSpawn"]);
-    route("zm:zombieDeath", ["onEntityDeath", "onZombieDeath"]);
-    route("zm:playerSpawn", ["onPlayerSpawn", "onPlayerSpawned"]);
-    route("zm:playerDeath", ["onPlayerDeath"]);
-    route("zm:playerDamaged", ["onPlayerDamaged"]);
-    route("zm:zombieDamaged", ["onEntityDamaged", "onZombieDamaged"]);
-    route("zm:purchase", ["onPurchase"]);\n\n
-// Multiplayer events
-route("mp:preload", ["onGamePreload"]);
-route("mp:build", ["onGameBuild"]);
-route("mp:start", ["onGameStart"]);
-route("mp:tick", ["onTick"]);
-route("mp:playerSpawn", ["onPlayerSpawn", "onPlayerSpawned"]);
-route("mp:playerDamaged", ["onPlayerDamaged"]);
-route("mp:playerDeath", ["onPlayerDeath"]);
-route("mp:weaponFired", ["onWeaponFired"]);
-route("net:welcome", ["onPlayerConnect"]);
-route("mp:gameEnd", ["onGameEnd"]);
+    const zmRoutes = [
+      ["zm:preload", ["onGamePreload"]],
+      ["zm:build", ["onGameBuild"]],
+      ["zm:start", ["onGameStart"]],
+      ["zm:tick", ["onTick"]],
+      ["zm:waveStart", ["onRoundStart"]],
+      ["zm:waveEnd", ["onRoundEnd"]],
+      ["zm:zombieSpawn", ["onEntitySpawn", "onZombieSpawn"]],
+      ["zm:zombieDeath", ["onEntityDeath", "onZombieDeath"]],
+      ["zm:playerSpawn", ["onPlayerSpawn", "onPlayerSpawned"]],
+      ["zm:playerDeath", ["onPlayerDeath"]],
+      ["zm:playerDamaged", ["onPlayerDamaged"]],
+      ["zm:zombieDamaged", ["onEntityDamaged", "onZombieDamaged"]],
+      ["zm:purchase", ["onPurchase"]],
+    ];
+    const mpRoutes = [
+      ["mp:preload", ["onGamePreload"]],
+      ["mp:build", ["onGameBuild"]],
+      ["mp:start", ["onGameStart"]],
+      ["mp:tick", ["onTick"]],
+      ["mp:playerSpawn", ["onPlayerSpawn", "onPlayerSpawned"]],
+      ["mp:playerDamaged", ["onPlayerDamaged"]],
+      ["mp:playerDeath", ["onPlayerDeath"]],
+      ["mp:weaponFired", ["onWeaponFired"]],
+      ["net:welcome", ["onPlayerConnect"]],
+      ["mp:gameEnd", ["onGameEnd"]],
+    ];
+
+    for (const [evt, handlers] of zmRoutes) route(evt, handlers);
+    for (const [evt, handlers] of mpRoutes) route(evt, handlers);
 
   }
 
