@@ -6,7 +6,7 @@ export class Input {
     this.events=events;
     this.keys=new Set();
     this.mouse={ dx:0, dy:0, locked:false, sensitivity:0.0022 };
-    this._onKeyDown = (e)=>{ this.keys.add(e.code); if(e.code==="Backquote") this.events.emit("dev:toggle"); };
+    this._onKeyDown = (e)=>{ this.keys.add(e.code); };
     this._onKeyUp = (e)=>{ this.keys.delete(e.code); };
     this._onMouseMove = (e)=>{
       if(!this.mouse.locked) return;

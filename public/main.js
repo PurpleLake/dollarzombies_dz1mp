@@ -26,6 +26,7 @@ import { LoadoutSelectScreen } from "/engine/core/ui/scripts/screens/LoadoutSele
 import { SettingsScreen } from "/engine/core/ui/scripts/screens/SettingsScreen.js";
 import { PauseMenuOverlay } from "/engine/core/ui/scripts/screens/PauseMenuOverlay.js";
 import { HudSystem } from "/engine/core/ui/scripts/HudSystem.js";
+import { DevModule } from "/engine/game/zm/dev/scripts/DevModule.js";
 import { zmMaps, getZmMap } from "/engine/game/zm/maps/MapRegistry.js";
 import { mpMaps, getMpMap } from "/engine/game/mp/maps/MapRegistry.js";
 import { LobbyController } from "/engine/core/scripts/lobby/LobbyController.js";
@@ -69,6 +70,7 @@ engine.ctx.ui = { uiLog };
 engine.ctx.uiRoot = uiRoot;
 engine.ctx.theme = theme;
 engine.ctx.options = options;
+engine.ctx.menu = menu;
 
 // Networking (WS) - used by Zombies (4p co-op) and Multiplayer (6v6)
 const wsUrl = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws";
@@ -110,7 +112,9 @@ engine.events.on("trigger:prompt", (e)=>{
   injectNameplateStyles();
   engine.ctx.notifications = new NotificationManager(engine);
   engine.ctx.nameplates = new NameplateManager(engine);
-engine.ctx.menu = menu;
+// Dev menu (global listener + overlay)
+const dev = new DevModule({ engine });
+engine.ctx.devModule = dev;
 engine.events.on("menu:toast", ({ msg })=> menu.toast(msg));
 
 // Hook UI updates

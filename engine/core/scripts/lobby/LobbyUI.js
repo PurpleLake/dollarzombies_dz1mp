@@ -15,11 +15,18 @@ function injectStyles(){
       padding: 18px;
       box-sizing: border-box;
     }
+    .dz-lobby-screen.dz-lobby-mp{
+      background:
+        repeating-linear-gradient(45deg, rgba(34,46,34,0.55) 0px, rgba(34,46,34,0.55) 12px, rgba(18,24,18,0.55) 12px, rgba(18,24,18,0.55) 24px),
+        radial-gradient(circle at 12% 18%, rgba(88,116,88,0.35), transparent 35%),
+        radial-gradient(circle at 80% 72%, rgba(56,78,56,0.30), transparent 38%),
+        #0b100b;
+    }
     .dz-lobby-layout{
       width: min(1280px, 96vw);
       height: min(90vh, 880px);
       display: grid;
-      grid-template-columns: 1fr 360px;
+      grid-template-columns: minmax(320px, 38%) 1fr;
       gap: 16px;
       background: color-mix(in srgb, var(--ui-panel) 70%, rgba(0,0,0,0.45));
       border: 1px solid var(--ui-panel-border);
@@ -51,18 +58,15 @@ function injectStyles(){
       font-size: 13px;
     }
     .dz-lobby-map-row{
-      position: absolute;
-      left: 50%;
-      bottom: 60px;
-      transform: translateX(-50%);
-      display: grid;
-      grid-template-columns: repeat(2, minmax(260px, 320px));
-      gap: 12px;
-      justify-content: center;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
       width: 100%;
       pointer-events: auto;
+      margin-top: 6px;
     }
     .dz-lobby-map-card{
+      width: 100%;
       position: relative;
       border-radius: 16px;
       overflow: hidden;
@@ -71,7 +75,7 @@ function injectStyles(){
       cursor: pointer;
       transition: transform 120ms ease, box-shadow 120ms ease;
       display: grid;
-      grid-template-rows: 180px auto;
+      grid-template-rows: 120px auto;
     }
     .dz-lobby-map-card:hover{
       transform: translateY(-3px);
@@ -111,28 +115,30 @@ function injectStyles(){
     .dz-lobby-players{
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
       flex: 1;
       min-height: 0;
+      overflow-y: auto;
+      padding-right: 4px;
     }
     .dz-lobby-slot{
       border: 1px solid rgba(255,255,255,0.06);
       border-radius: 12px;
-      padding: 10px 12px;
+      padding: 8px 10px;
       background: rgba(0,0,0,0.25);
       display: flex;
       justify-content: space-between;
       gap: 10px;
       align-items: center;
-      min-height: 46px;
+      min-height: 40px;
     }
     .dz-lobby-slot-empty{
       color: var(--ui-text-dim);
       font-style: italic;
     }
     .dz-lobby-dot{
-      width: 12px;
-      height: 12px;
+      width: 10px;
+      height: 10px;
       border-radius: 999px;
       margin-right: 8px;
       background: gray;
@@ -229,14 +235,13 @@ export class LobbyUI {
     this.left.appendChild(this.modeSub);
     this.left.appendChild(actionRow);
     this.left.appendChild(voteLabel);
+    // Map cards (stacked)
+    this.mapRow = document.createElement("div");
+    this.mapRow.className = "dz-lobby-map-row";
+    this.left.appendChild(this.mapRow);
     this.left.appendChild(this.readyBtn);
     this.left.appendChild(this.readyStatus);
     this.left.appendChild(this.startRow);
-
-    // Map cards (bottom center)
-    this.mapRow = document.createElement("div");
-    this.mapRow.className = "dz-lobby-map-row";
-    this.layout.appendChild(this.mapRow);
 
     // Right content (players)
     const pTitle = document.createElement("div");
@@ -273,6 +278,7 @@ export class LobbyUI {
     const hostId = s.getHostId();
     const isHost = hostId && localId && hostId === String(localId);
 
+    this.screen.classList.toggle("dz-lobby-mp", s.mode === "mp");
     this.modeSub.textContent = (s.mode === "mp") ? "Multiplayer Lobby" : "Zombies Lobby";
     this.readyStatus.textContent = `Ready: ${readyCount}/${total} (Need >= ${needed || 0})`;
 
@@ -287,7 +293,7 @@ export class LobbyUI {
 
     // Map cards
     this.renderMaps(localId);
-    this.renderPlayers(localId);
+    this.renderPlayers(localId, hostId);
 
     this.motdBar.textContent = s.motd || "";
   }
@@ -342,7 +348,7 @@ export class LobbyUI {
     }
   }
 
-  renderPlayers(localId){
+  renderPlayers(localId, hostId){
     this.playerList.innerHTML = "";
     const maxSlots = this.state.mode === "mp" ? 12 : 4;
     const players = this.state.players.slice(0, maxSlots);
@@ -364,6 +370,7 @@ export class LobbyUI {
       if(p){
         const ready = this.state.readyByPlayerId.get(String(p.id)) || false;
         dot.style.background = ready ? "#45d483" : "gray";
+        const isHost = hostId && String(p.id) === String(hostId);
         const name = document.createElement("div");
         name.textContent = p.name || `Player ${p.id}`;
         if(localId && String(p.id) === String(localId)){
@@ -371,6 +378,14 @@ export class LobbyUI {
         }
         left.appendChild(dot);
         left.appendChild(name);
+        if(isHost){
+          const crown = document.createElement("div");
+          crown.textContent = "👑";
+          crown.style.fontSize = "14px";
+          crown.style.lineHeight = "1";
+          crown.title = "Host";
+          left.appendChild(crown);
+        }
 
         const vote = voteLookup.get(String(p.id));
         const voteText = document.createElement("div");

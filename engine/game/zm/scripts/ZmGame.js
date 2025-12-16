@@ -6,7 +6,6 @@ import { ZmWorld } from "./ZmWorld.js";
 import { ZmWaves } from "./ZmWaves.js";
 import { PlayersModule } from "../players/scripts/PlayersModule.js";
 import { ZombiesModule } from "../zombies/scripts/ZombiesModule.js";
-import { DevModule } from "../dev/scripts/DevModule.js";
 import { CashModule } from "./CashModule.js";
 import { ShopModule } from "./ShopModule.js";
 import { WeaponDB } from "../../../core/weapons/scripts/WeaponDB.js";
@@ -45,14 +44,11 @@ export class ZmGame {
       // expose weapons
       this.engine.ctx.weapons = this.weapons;
 
-      this.dev = new DevModule({ engine });
-
     // Systems tick order
     engine.ecs.use((dt, ecs, ctx)=>this.world.tick(dt, ecs, ctx));
     engine.ecs.use((dt, ecs, ctx)=>this.players.tick(dt, ecs, ctx));
     engine.ecs.use((dt, ecs, ctx)=>this.zombies.tick(dt, ecs, ctx));
     engine.ecs.use((dt, ecs, ctx)=>this.waves.tick(dt, ecs, ctx));
-    engine.ecs.use((dt, ecs, ctx)=>this.dev.tick(dt, ecs, ctx));
     engine.ecs.use((dt, ecs, ctx)=>this.renderTick(dt, ecs, ctx));
   }
 

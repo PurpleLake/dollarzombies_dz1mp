@@ -14,12 +14,12 @@ export class DevModule {
       if(e.button === 0) this.mouseDown = false;
     });
 
-    
-window.addEventListener("keydown", (e)=>{
-  if(e.code === "Backquote" || e.code === "Quote" || e.key === "'"){
-    engine.events.emit("dev:toggle", {});
-  }
-});
+    // global hotkey (tilde/backquote or apostrophe)
+    window.addEventListener("keydown", (e)=>{
+      if(e.code === "Backquote" || e.code === "Quote" || e.key === "'"){
+        engine.events.emit("dev:toggle", {});
+      }
+    });
 
     engine.events.on("dev:toggle", ()=>{
       this.open = !this.open;
@@ -43,6 +43,9 @@ window.addEventListener("keydown", (e)=>{
 engine.events.emit("dev:toast", { msg: this.open ? "Dev: ON (` to close)" : "Dev: OFF" });
 
     });
+
+    // run lightweight dev tick alongside the engine loop
+    engine.events.on("engine:tick", ({ dt })=> this.tick(dt, engine.ecs, engine.ctx));
 
     // quick commands via console:
     engine.ctx.dev = { toast: (m)=>engine.events.emit("dev:toast",{msg:m}) };
