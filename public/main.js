@@ -1,4 +1,5 @@
 import { Engine } from "/engine/core/scripts/Engine.js";
+import { ECS } from "/engine/core/scripts/ECS.js";
 import { Log } from "/engine/core/utilities/Log.js";
 import { ScriptLoader } from "/engine/core/scripts/ScriptLoader.js";
 import { ZmGame } from "/engine/game/zm/scripts/ZmGame.js";
@@ -17,12 +18,16 @@ import { UIRoot } from "/engine/core/ui/scripts/UIRoot.js";
 import { ThemeManager } from "/engine/core/ui/scripts/Theme.js";
 import { OptionsStore } from "/engine/core/ui/scripts/Options.js";
 import { MenuManager } from "/engine/core/ui/scripts/MenuManager.js";
+import { WorldBuilder } from "/engine/core/scripts/world/WorldBuilder.js";
 
 import { MainMenuScreen } from "/engine/core/ui/scripts/screens/MainMenuScreen.js";
+import { MapSelectScreen } from "/engine/core/ui/scripts/screens/MapSelectScreen.js";
 import { LoadoutSelectScreen } from "/engine/core/ui/scripts/screens/LoadoutSelectScreen.js";
 import { SettingsScreen } from "/engine/core/ui/scripts/screens/SettingsScreen.js";
 import { PauseMenuOverlay } from "/engine/core/ui/scripts/screens/PauseMenuOverlay.js";
-  import { HudSystem } from "/engine/core/ui/scripts/HudSystem.js";
+import { HudSystem } from "/engine/core/ui/scripts/HudSystem.js";
+import { zmMaps, getZmMap } from "/engine/game/zm/maps/MapRegistry.js";
+import { mpMaps, getMpMap } from "/engine/game/mp/maps/MapRegistry.js";
 
 // Debug log (bottom-left)
 const logEl = document.getElementById("log");
@@ -124,10 +129,39 @@ engine.events.on("weapon:reloadEnd", ({ clip, reserve }) => {
 
 // Scripts + game
 const scripts = new ScriptLoader({ engine });
-const mode = options.get("gameMode") || "zm";
-  engine.ctx.net?.setMode?.(mode);
-  const game = (mode === "mp") ? new MpGame({ engine, scripts }) : new ZmGame({ engine, scripts });
-  engine.ctx.game = game;
+let game = null;
+
+const initialMode = options.get("gameMode") || "zm";
+const defaultZm = getZmMap(options.get("zmMap"));
+const defaultMp = getMpMap(options.get("mpMap"));
+const session = engine.ctx.session = {
+  mode: initialMode,
+  mapSelections: { zm: defaultZm.id, mp: defaultMp.id },
+  mapId: initialMode === "mp" ? defaultMp.id : defaultZm.id,
+};
+engine.ctx.net?.setMode?.(session.mode);
+
+function getCurrentMapDef(mode=session.mode){
+  return mode === "mp" ? getMpMap(session.mapSelections.mp) : getZmMap(session.mapSelections.zm);
+}
+
+function resetEcs(){
+  engine.ecs = new ECS();
+  engine.ctx.ecs = engine.ecs;
+}
+
+function destroyCurrentGame(){
+  if(game){
+    try{ game.dispose?.(); } catch {}
+  }
+  game = null;
+  engine.ctx.game = null;
+  engine.ctx.renderer = null;
+  engine.ctx.input = null;
+  engine.ctx.world = null;
+  engine.ctx.worldBuilder = null;
+  resetEcs();
+}
 
 // Apply options live
 options.onChange((data, key, value)=>{
@@ -138,10 +172,9 @@ options.onChange((data, key, value)=>{
   }
 });
 
-async function loadAllScripts(){
+async function loadAllScripts(mode=session.mode){
   if(logEl) logEl.innerHTML = "";
   uiLog("Loading manifest...");
-  const mode = options.get("gameMode") || "zm";
   const manifest = (mode === "mp") ? "/scripts/mp_manifest.json" : "/scripts/manifest.json";
   scripts.dzs?.clear?.();
   await scripts.loadManifest(manifest);
@@ -152,21 +185,59 @@ async function loadAllScripts(){
   uiLog("Ready.");
 }
 
-async function startGame(){
-  try{
-  await loadAllScripts();
-  await game.start();
-  // initialize option values after game constructs input/renderer
-  if(engine.ctx.input) engine.ctx.input.mouse.sensitivity = options.get("mouseSensitivity");
-  if(engine.ctx.renderer){
-    engine.ctx.renderer.camera.fov = options.get("fov");
-    engine.ctx.renderer.camera.updateProjectionMatrix();
+async function loadMapForMode(mode, mapDef){
+  const existingBuilder = engine.ctx.worldBuilder || engine.ctx.world;
+  const builder = existingBuilder || new WorldBuilder({ engine, renderer: engine.ctx.renderer });
+  engine.ctx.world = builder;
+  engine.ctx.worldBuilder = builder;
+  try { builder.clearWorld?.(); } catch {}
+
+  const mod = await import(mapDef.entryScript + `?v=${Date.now()}`);
+  const buildResult = (typeof mod.buildMap === "function") ? await mod.buildMap(engine, builder) : null;
+  const spawns = mod.spawnPoints || buildResult || {};
+  const mapCtx = { id: mapDef.id, mode, root: mapDef.root, def: mapDef, spawnPoints: spawns };
+  if(mode === "mp"){
+    mapCtx.mpSpawnsTeam0 = spawns.teamA || spawns.team0 || spawns.mpSpawnsTeam0 || [];
+    mapCtx.mpSpawnsTeam1 = spawns.teamB || spawns.team1 || spawns.mpSpawnsTeam1 || [];
+  } else {
+    mapCtx.playerSpawns = spawns.players || spawns.playerSpawns || [];
+    mapCtx.zombieSpawns = spawns.zombies || spawns.zombieSpawns || [];
   }
-  if(!engine.loop.running) engine.start();
-  engine.ctx.timeScale = 1;
-  menu.setScreen(null);
-  menu.setOverlay(null);
-  menu.showHud(true);
+  engine.ctx.map = mapCtx;
+  engine.events.emit(`${mode}:mapLoaded`, { map: mapDef.id });
+  return spawns;
+}
+
+async function startGame(){
+  const mode = session.mode || "zm";
+  const mapDef = getCurrentMapDef(mode);
+  session.mapId = mapDef.id;
+  try{
+    options.set("gameMode", mode);
+    if(mode === "mp") options.set("mpMap", mapDef.id);
+    else options.set("zmMap", mapDef.id);
+    engine.ctx.net?.setMode?.(mode);
+
+    destroyCurrentGame();
+    game = (mode === "mp") ? new MpGame({ engine, scripts }) : new ZmGame({ engine, scripts });
+    engine.ctx.game = game;
+
+    await loadAllScripts(mode);
+    const spawnPoints = await loadMapForMode(mode, mapDef);
+    if(typeof game.applySpawnPoints === "function") game.applySpawnPoints(spawnPoints);
+    await game.start({ mapDef, spawnPoints });
+
+    // initialize option values after game constructs input/renderer
+    if(engine.ctx.input) engine.ctx.input.mouse.sensitivity = options.get("mouseSensitivity");
+    if(engine.ctx.renderer){
+      engine.ctx.renderer.camera.fov = options.get("fov");
+      engine.ctx.renderer.camera.updateProjectionMatrix();
+    }
+    if(!engine.loop.running) engine.start();
+    engine.ctx.timeScale = 1;
+    menu.setScreen(null);
+    menu.setOverlay(null);
+    menu.showHud(true);
   } catch (err){
     uiLog('[scripts] ERROR: ' + (err?.stack || err));
     menu.toast('Script load failed (see log)');
@@ -190,10 +261,45 @@ function showSettings({ overlay=false } = {}){
   else menu.setScreen(node);
 }
 
+function showMapSelect(mode="zm"){
+  const maps = mode === "mp" ? mpMaps : zmMaps;
+  const fallback = maps.find(m=>!m.disabled) || maps[0];
+  session.mode = mode;
+  let selectedId = (mode === "mp" ? session.mapSelections.mp : session.mapSelections.zm) || fallback?.id;
+  if(maps.find(m=>m.id === selectedId && m.disabled)) selectedId = fallback?.id;
+  session.mapId = selectedId;
+
+  const applySelection = (id)=>{
+    const def = mode === "mp" ? getMpMap(id) : getZmMap(id);
+    selectedId = def.id;
+    session.mapId = def.id;
+    if(mode === "mp") session.mapSelections.mp = def.id;
+    else session.mapSelections.zm = def.id;
+  };
+
+  applySelection(selectedId);
+  menu.showHud(false);
+  menu.setOverlay(null);
+  menu.setScreen(MapSelectScreen({
+    mode,
+    maps,
+    selectedId,
+    onSelect: (id)=> applySelection(id),
+    onBack: ()=> showMainMenu(),
+    onPlay: (id)=>{
+      applySelection(id || selectedId);
+      startGame();
+    },
+  }));
+}
+
 
 function showClassSelect(){
-  const mode = options.get("gameMode") || "zm";
-  if(mode === "mp") return showMpClass();
+  const mode = session.mode || "zm";
+  if(mode === "mp"){
+    menu.toast("Multiplayer class editor coming soon.");
+    return showMainMenu();
+  }
   menu.showHud(false);
   menu.setOverlay(null);
 
@@ -219,7 +325,9 @@ function showMainMenu(){
   menu.showHud(false);
   menu.setOverlay(null);
   menu.setScreen(MainMenuScreen({
-    onPlay: ()=> showClassSelect(),
+    mode: session.mode,
+    onMode: (m)=> showMapSelect(m),
+    onPlay: ()=> showMapSelect(session.mode),
     onClass: ()=> showClassSelect(),
     onSettings: ()=> showSettings({ overlay:false }),
   }));
@@ -251,7 +359,8 @@ function exitToMenu(){
   menu.setOverlay(null);
   // soft-reset
   try { engine.ctx.game?.zombies?.clear?.(); } catch {}
-  try { engine.ctx.game?.world?.clear?.(); } catch {}
+  try { engine.ctx.game?.world?.clearWorld?.(); } catch {}
+  destroyCurrentGame();
   showMainMenu();
 }
 
@@ -278,13 +387,3 @@ showMainMenu();
 // If something throws, show it
 window.addEventListener("error", (e) => uiLog("[error] " + (e?.error?.stack || e.message)));
 Log.info("Boot ok");
-
-
-function showMpClass(){
-  clearScreen();
-  const s = MpClassScreen({
-    engine,
-    onBack: ()=> showMainMenu(),
-  });
-  mountScreen(s);
-}

@@ -9,8 +9,8 @@ export class OptionsStore {
       loadoutSecondary: "glock_19",
       gameMode: "zm",
       mpActiveClass: 0,
-      zmMap: "yard01",
-      mpMap: "arena01",
+      zmMap: "zm_facility",
+      mpMap: "mp_arena",
       mpClasses: [
         { name:"Assault", primary:"ar_m4", secondary:"glock_19" },
         { name:"SMG Rush", primary:"smg_mp5", secondary:"p_1911" },

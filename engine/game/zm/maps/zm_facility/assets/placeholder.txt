@@ -1,0 +1,1 @@
+Assets for zm_facility (textures, props) can live here.

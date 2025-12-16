@@ -264,5 +264,15 @@ export function makeBuiltins(ctx){
     // Audio
     playSound: (player, soundId)=> ctx.audio?.play?.(String(soundId)),
     playSoundAll: (soundId)=> ctx.audio?.play?.(String(soundId)),
+
+    // World helpers (bridge to WorldBuilder/ZmWorld)
+    worldClear: ()=> ctx.world?.clearWorld?.() ?? ctx.world?.clear?.(),
+    addFloor: (size=50)=> ctx.world?.addFloor?.({ size }),
+    addWalls: (size=50, height=3)=> ctx.world?.addBoundaryWalls?.({ size, height }),
+    addCrate: (x=0, y=0.5, z=0)=> ctx.world?.addCrate?.({ x, y, z }),
+    setPlayerSpawn: (x=0, z=0)=> ctx.game?.players?.setSpawn?.(Number(x||0), Number(z||0)),
+    addZombieSpawn: (x=0, z=0)=> ctx.game?.zombies?.addSpawn?.(Number(x||0), Number(z||0)),
+    setWaveTarget: (n)=> ctx.game?.waves?.setTarget?.(Number(n||0)),
+    setSpawnEveryMs: (ms)=> ctx.game?.waves?.setSpawnEveryMs?.(Number(ms||0)),
   };
 }

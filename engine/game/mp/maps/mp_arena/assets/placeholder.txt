@@ -1,0 +1,1 @@
+Assets for mp_arena map (models, textures) can be placed here.
