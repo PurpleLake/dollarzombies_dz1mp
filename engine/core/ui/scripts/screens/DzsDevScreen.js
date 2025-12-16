@@ -30,16 +30,20 @@ export function DzsDevScreen({ engine, onClose }){
   panel.className = "dz-panel";
   panel.style.width = "min(1100px, 95vw)";
   panel.style.height = "min(86vh, 780px)";
+  panel.style.gridTemplateRows = "1fr";
   panel.style.display = "grid";
   panel.style.gridTemplateColumns = "320px 1fr";
   panel.style.gap = "12px";
   panel.style.padding = "14px";
+  panel.style.boxSizing = "border-box";
 
   // LEFT: navigation / sections
   const left = document.createElement("div");
   left.style.display = "flex";
   left.style.flexDirection = "column";
   left.style.gap = "10px";
+  left.style.height = "100%";
+  left.style.minHeight = "0";
   left.style.minWidth = "0";
 
   const header = document.createElement("div");
@@ -91,6 +95,8 @@ export function DzsDevScreen({ engine, onClose }){
   right.style.display = "flex";
   right.style.flexDirection = "column";
   right.style.gap = "10px";
+  right.style.height = "100%";
+  right.style.minHeight = "0";
 
   const rightHeader = mkCard();
   rightHeader.style.display = "flex";
@@ -112,6 +118,7 @@ export function DzsDevScreen({ engine, onClose }){
 
   const body = mkCard();
   body.style.flex = "1";
+  body.style.height = "100%";
   body.style.minHeight = "0";
   body.style.display = "flex";
   body.style.flexDirection = "column";
@@ -288,11 +295,31 @@ export function DzsDevScreen({ engine, onClose }){
     for(const d of show){
       const card = mkCard();
       card.style.background = "rgba(0,0,0,0.28)";
+      card.style.padding = "0";
+      card.style.overflow = "hidden";
+
+      const header = document.createElement("button");
+      header.type = "button";
+      header.style.display = "flex";
+      header.style.alignItems = "center";
+      header.style.gap = "10px";
+      header.style.width = "100%";
+      header.style.padding = "12px";
+      header.style.border = "none";
+      header.style.background = "transparent";
+      header.style.color = "inherit";
+      header.style.cursor = "pointer";
+
+      const caret = document.createElement("div");
+      caret.style.fontFamily = "var(--ui-mono)";
+      caret.style.opacity = "0.8";
+      caret.textContent = ">";
 
       const h = document.createElement("div");
       h.style.display="flex";
       h.style.justifyContent="space-between";
       h.style.gap="12px";
+      h.style.flex = "1";
       const name = document.createElement("div");
       name.style.fontWeight="950";
       name.textContent = d.name;
@@ -303,28 +330,53 @@ export function DzsDevScreen({ engine, onClose }){
       h.appendChild(name);
       h.appendChild(sig);
 
+      header.appendChild(caret);
+      header.appendChild(h);
+
+      const panel = document.createElement("div");
+      panel.style.display = "none";
+      panel.style.padding = "0 12px 12px 36px";
+      panel.style.borderTop = "1px solid rgba(255,255,255,0.08)";
+      panel.style.background = "rgba(255,255,255,0.02)";
+
       const desc = document.createElement("div");
       desc.className="dz-help";
-      desc.style.marginTop="6px";
+      desc.style.marginTop="10px";
       desc.textContent = d.desc;
 
-      card.appendChild(h);
-      card.appendChild(desc);
+      const sigText = document.createElement("div");
+      sigText.className = "dz-help";
+      sigText.style.fontFamily = "var(--ui-mono)";
+      sigText.style.opacity = "0.9";
+      sigText.style.marginTop = "6px";
+      sigText.textContent = `Signature: ${d.sig}`;
 
-      if(d.example){
-        const ex = document.createElement("pre");
-        ex.style.margin="10px 0 0 0";
-        ex.style.padding="10px";
-        ex.style.borderRadius="12px";
-        ex.style.background="rgba(0,0,0,0.35)";
-        ex.style.border="1px solid rgba(255,255,255,0.08)";
-        ex.style.overflow="auto";
-        ex.style.fontFamily="var(--ui-mono)";
-        ex.style.fontSize="12px";
-        ex.textContent = `on zm:build {\n  ${d.example}\n}`;
-        card.appendChild(ex);
-      }
+      const ex = document.createElement("pre");
+      ex.style.margin="10px 0 0 0";
+      ex.style.padding="10px";
+      ex.style.borderRadius="12px";
+      ex.style.background="rgba(0,0,0,0.35)";
+      ex.style.border="1px solid rgba(255,255,255,0.08)";
+      ex.style.overflow="auto";
+      ex.style.fontFamily="var(--ui-mono)";
+      ex.style.fontSize="12px";
+      const exLine = d.example || `${d.name} ...args`;
+      ex.textContent = `on zm:build {\n  ${exLine}\n}`;
 
+      panel.appendChild(desc);
+      panel.appendChild(sigText);
+      panel.appendChild(ex);
+
+      let open = false;
+      const toggle = ()=>{
+        open = !open;
+        panel.style.display = open ? "block" : "none";
+        caret.textContent = open ? "v" : ">";
+      };
+      header.addEventListener("click", toggle);
+
+      card.appendChild(header);
+      card.appendChild(panel);
       docsList.appendChild(card);
     }
 
