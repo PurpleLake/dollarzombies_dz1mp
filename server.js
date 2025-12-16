@@ -7,7 +7,7 @@ import path from "path";
 import url from "url";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -274,4 +274,29 @@ server.on("upgrade", (req, sock) => {
 });
 
 
-server.listen(PORT, () => console.log(`[server] http://localhost:${PORT}`));
+function startServer(port, retries=8){
+  const targetPort = Number(port) || 3000;
+
+  const onError = (err) => {
+    server.removeListener("listening", onListen);
+    if(err?.code === "EADDRINUSE" && retries > 0){
+      const nextPort = targetPort + 1;
+      console.warn(`[server] Port ${targetPort} in use, trying ${nextPort}`);
+      startServer(nextPort, retries - 1);
+      return;
+    }
+    console.error(`[server] Failed to bind to port ${targetPort}: ${err?.message || err}`);
+    process.exit(1);
+  };
+
+  const onListen = () => {
+    server.removeListener("error", onError);
+    console.log(`[server] http://localhost:${targetPort}`);
+  };
+
+  server.once("error", onError);
+  server.once("listening", onListen);
+  server.listen(targetPort);
+}
+
+startServer(PORT);
