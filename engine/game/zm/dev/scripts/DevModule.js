@@ -16,7 +16,7 @@ export class DevModule {
 
     
 window.addEventListener("keydown", (e)=>{
-  if(e.code === "Backquote"){
+  if(e.code === "Backquote" || e.code === "Quote" || e.key === "'"){
     engine.events.emit("dev:toggle", {});
   }
 });

@@ -55,7 +55,8 @@ export class PlayersModule {
     // expose for other systems + UI
     this.engine.ctx.player = this;
     this.engine.events.emit("player:hp", { hp: this.hp });
-    this.engine.events.emit("zm:playerDamaged", { player: this, amount, hp: this.hp });
+    // initial state broadcast: no damage yet
+    this.engine.events.emit("zm:playerDamaged", { player: this, amount: 0, hp: this.hp });
   }
 
   setSpawn(x, z){

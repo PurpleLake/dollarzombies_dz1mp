@@ -92,6 +92,11 @@ loadText(text, filename="(dzs)"){
     this.handlers.set(eventName, lines.slice());
   }
 
+  // Placeholder for future binding logic; DZS handlers are already routed via ScriptLoader
+  bindAll(){
+    return;
+  }
+
 
 startThread(handlerName, payload=null){
   const name = String(handlerName||"");

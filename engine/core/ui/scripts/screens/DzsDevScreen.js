@@ -55,7 +55,7 @@ export function DzsDevScreen({ engine, onClose }){
   const spacer = document.createElement("div");
   spacer.style.flex = "1";
 
-  const closeBtn = Button({ text:"Close (`)", variant:"secondary", onClick: ()=>onClose?.() });
+  const closeBtn = Button({ text:"Close (` or ')", variant:"secondary", onClick: ()=>onClose?.() });
 
   header.appendChild(title);
   header.appendChild(spacer);
@@ -105,7 +105,7 @@ export function DzsDevScreen({ engine, onClose }){
   const rightHint = document.createElement("div");
   rightHint.className = "dz-help";
   rightHint.style.marginLeft = "10px";
-  rightHint.textContent = "Press ` to toggle. This overlay does not pause the game yet.";
+  rightHint.textContent = "Press ` or ' to toggle. This overlay does not pause the game yet.";
 
   rightHeader.appendChild(rightTitle);
   rightHeader.appendChild(rightHint);

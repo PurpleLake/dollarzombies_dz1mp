@@ -4,7 +4,7 @@ import { Slider } from "../widgets/Slider.js";
 import { Dropdown } from "../widgets/Dropdown.js";
 import { ListBox } from "../widgets/ListBox.js";
 
-export function SettingsScreen({ menu, theme, options, onBack }){
+export function SettingsScreen({ menu, theme, options, engine, onBack }){
   const screen = document.createElement("div");
   screen.className = "dz-screen";
 
@@ -78,6 +78,11 @@ export function SettingsScreen({ menu, theme, options, onBack }){
   row.style.marginTop = "12px";
   row.appendChild(Button({ text:"Back", variant:"secondary", onClick: ()=>onBack?.() }));
   row.appendChild(document.createElement("div")).className="dz-spacer";
+  row.appendChild(Button({
+    text:"Developer Menu",
+    onClick: ()=>engine?.events?.emit("dev:toggle", {}),
+    help:"Opens the dev overlay (` or ' hotkey)."
+  }));
 
   panel.appendChild(title);
   panel.appendChild(sub);

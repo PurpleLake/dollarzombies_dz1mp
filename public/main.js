@@ -180,6 +180,7 @@ function showSettings({ overlay=false } = {}){
     menu,
     theme,
     options,
+    engine,
     onBack: ()=>{
       if(overlay) showPauseOverlay();
       else showMainMenu();
