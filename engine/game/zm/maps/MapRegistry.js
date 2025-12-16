@@ -3,7 +3,7 @@ export const zmMaps = [
     id: "zm_facility",
     name: "Facility",
     desc: "Close-quarters survival arena.",
-    preview: "/assets/ui/maps/zm_facility.png",
+    preview: "/public/assets/ui/maps/zm_facility.png",
     root: "/engine/game/zm/maps/zm_facility",
     entryScript: "/engine/game/zm/maps/zm_facility/scripts/map.js",
   },

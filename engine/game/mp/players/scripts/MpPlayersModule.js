@@ -11,15 +11,14 @@ export class MpPlayersModule {
     this.input = input;
     this.weapons = weapons;
 
-    this.weaponCtrl = new WeaponController(engine.ctx.weapons);
-    this.viewModel = new ViewModel({ renderer: engine.ctx.renderer, camera: this.cam });
-    this._lastVmWeapon = null;
-
-
     // Local player uses existing FPS controller from ZM players module? Keep minimal.
     // We'll create a lightweight camera rig for MP, similar to ZM.
     this.cam = renderer.camera;
     this.cam.position.set(0, 1.7, 5);
+
+    this.weaponCtrl = new WeaponController(engine.ctx.weapons);
+    this.viewModel = new ViewModel({ renderer: engine.ctx.renderer, camera: this.cam });
+    this._lastVmWeapon = null;
 
     this.vel = new THREE.Vector3();
     this.raycaster = new THREE.Raycaster();

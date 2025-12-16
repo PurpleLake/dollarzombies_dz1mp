@@ -156,6 +156,7 @@ function destroyCurrentGame(){
   }
   game = null;
   engine.ctx.game = null;
+  engine.ctx.canvas = null;
   engine.ctx.renderer = null;
   engine.ctx.input = null;
   engine.ctx.world = null;

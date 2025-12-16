@@ -97,6 +97,7 @@ const offEnd = this.engine.events.on("zm:playerDeath", (e)=>{
   }
 
   dispose(){
+    try { this.players?.dispose?.(); } catch {}
     try { this.input?.dispose?.(); } catch {}
     try { this.world?.clearWorld?.(); } catch {}
     try { this.zombies?.clear?.(); } catch {}

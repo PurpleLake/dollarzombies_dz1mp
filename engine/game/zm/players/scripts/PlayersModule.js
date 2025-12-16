@@ -44,13 +44,14 @@ export class PlayersModule {
     this.weapon = this.weaponCtl.weapon;
 
     // mouse wheel weapon cycling
-    window.addEventListener("wheel", (e)=>{
+    this._onWheel = (e)=>{
       if(!this.input.mouse.locked) return;
       if(e.deltaY > 0) this.weaponCtl.next();
       else this.weaponCtl.prev();
       this.weaponDef = this.weaponCtl.weaponDef;
       this.weapon = this.weaponCtl.weapon;
-    }, { passive:true });
+    };
+    window.addEventListener("wheel", this._onWheel, { passive:true });
 
     // expose for other systems + UI
     this.engine.ctx.player = this;
@@ -183,5 +184,9 @@ export class PlayersModule {
     const minD = def.damage * (1 - Math.max(0, Math.min(1, def.dropoff)));
     const extra = Math.min(1, (dist - r) / r);
     return Math.max(minD, def.damage * (1 - extra * def.dropoff));
+  }
+
+  dispose(){
+    if(this._onWheel) window.removeEventListener("wheel", this._onWheel);
   }
 }

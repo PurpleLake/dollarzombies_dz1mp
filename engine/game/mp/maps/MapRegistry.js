@@ -3,7 +3,7 @@ export const mpMaps = [
     id: "mp_arena",
     name: "Arena",
     desc: "Symmetrical close-range scrim box.",
-    preview: "/assets/ui/maps/mp_arena.png",
+    preview: "/public/assets/ui/maps/mp_arena.png",
     root: "/engine/game/mp/maps/mp_arena",
     entryScript: "/engine/game/mp/maps/mp_arena/scripts/map.js",
   },

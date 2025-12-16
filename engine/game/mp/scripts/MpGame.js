@@ -73,6 +73,7 @@ export class MpGame {
   }
 
   dispose(){
+    try { this.players?.dispose?.(); } catch {}
     try { this.input?.dispose?.(); } catch {}
     try { this.world?.clearWorld?.(); } catch {}
     try { this.renderer?.domElement?.remove?.(); } catch {}

@@ -48,6 +48,7 @@ function MapCard({ map, selected, onSelect }){
 export function MapSelectScreen({ mode="zm", maps=[], selectedId=null, onSelect, onBack, onPlay }){
   const screen = document.createElement("div");
   screen.className = "dz-screen";
+  let current = selectedId;
 
   const panel = document.createElement("div");
   panel.className = "dz-panel";
@@ -73,7 +74,15 @@ export function MapSelectScreen({ mode="zm", maps=[], selectedId=null, onSelect,
   function renderCards(){
     grid.innerHTML = "";
     for(const m of maps){
-      const card = MapCard({ map: m, selected: String(m.id) === String(selectedId), onSelect });
+      const card = MapCard({
+        map: m,
+        selected: String(m.id) === String(current),
+        onSelect: (id)=>{
+          current = id;
+          onSelect?.(id);
+          renderCards();
+        }
+      });
       grid.appendChild(card);
     }
   }
@@ -83,7 +92,7 @@ export function MapSelectScreen({ mode="zm", maps=[], selectedId=null, onSelect,
   actions.className = "dz-row";
   actions.style.marginTop = "12px";
   actions.appendChild(Button({ text: "Back", variant: "secondary", onClick: ()=>onBack?.() }));
-  actions.appendChild(Button({ text: "Play", onClick: ()=>onPlay?.(selectedId), variant: "primary" }));
+  actions.appendChild(Button({ text: "Play", onClick: ()=>onPlay?.(current), variant: "primary" }));
 
   panel.appendChild(title);
   panel.appendChild(sub);
