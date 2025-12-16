@@ -28,6 +28,7 @@ import { PauseMenuOverlay } from "/engine/core/ui/scripts/screens/PauseMenuOverl
 import { HudSystem } from "/engine/core/ui/scripts/HudSystem.js";
 import { zmMaps, getZmMap } from "/engine/game/zm/maps/MapRegistry.js";
 import { mpMaps, getMpMap } from "/engine/game/mp/maps/MapRegistry.js";
+import { LobbyController } from "/engine/core/scripts/lobby/LobbyController.js";
 
 // Debug log (bottom-left)
 const logEl = document.getElementById("log");
@@ -110,6 +111,7 @@ engine.events.on("trigger:prompt", (e)=>{
   engine.ctx.notifications = new NotificationManager(engine);
   engine.ctx.nameplates = new NameplateManager(engine);
 engine.ctx.menu = menu;
+engine.events.on("menu:toast", ({ msg })=> menu.toast(msg));
 
 // Hook UI updates
 engine.events.on("log", ({ msg }) => uiLog(msg));
@@ -141,8 +143,26 @@ const session = engine.ctx.session = {
 };
 engine.ctx.net?.setMode?.(session.mode);
 
+const lobby = new LobbyController({
+  engine,
+  menu,
+  options,
+  onStartGame: (mapId)=>{
+    const mode = session.mode || "zm";
+    session.mapId = mapId;
+    if(mode === "mp") session.mapSelections.mp = mapId;
+    else session.mapSelections.zm = mapId;
+    startGame();
+  },
+  onBackToMenu: ()=> showMainMenu(),
+  onCreateClass: ()=> showClassSelect({ returnToLobby:true }),
+});
+engine.ctx.lobby = { controller: lobby, state: lobby.state };
+
 function getCurrentMapDef(mode=session.mode){
-  return mode === "mp" ? getMpMap(session.mapSelections.mp) : getZmMap(session.mapSelections.zm);
+  const pick = session.mapId;
+  if(mode === "mp") return getMpMap(pick || session.mapSelections.mp);
+  return getZmMap(pick || session.mapSelections.zm);
 }
 
 function resetEcs(){
@@ -289,17 +309,25 @@ function showMapSelect(mode="zm"){
     onBack: ()=> showMainMenu(),
     onPlay: (id)=>{
       applySelection(id || selectedId);
-      startGame();
+      // Map select flow now routes through lobby start
+      showLobby(mode);
     },
   }));
 }
 
+function showLobby(mode=session.mode){
+  const m = mode || "zm";
+  session.mode = m;
+  engine.ctx.net?.setMode?.(m);
+  lobby.show(m);
+}
 
-function showClassSelect(){
+
+function showClassSelect({ returnToLobby=false } = {}){
   const mode = session.mode || "zm";
   if(mode === "mp"){
     menu.toast("Multiplayer class editor coming soon.");
-    return showMainMenu();
+    return returnToLobby ? showLobby(mode) : showMainMenu();
   }
   menu.showHud(false);
   menu.setOverlay(null);
@@ -312,12 +340,13 @@ function showClassSelect(){
     weapons,
     selectedPrimaryId: currentPrimary,
     selectedSecondaryId: currentSecondary,
-    onBack: ()=> showMainMenu(),
+    onBack: ()=> returnToLobby ? showLobby(session.mode) : showMainMenu(),
     onConfirm: ({ primaryId, secondaryId })=>{
       if(primaryId) options.set("loadoutPrimary", primaryId);
       if(secondaryId) options.set("loadoutSecondary", secondaryId);
       menu.toast(`Loadout set: ${primaryId || "none"} / ${secondaryId || "none"}`);
-      startGame();
+      if(returnToLobby) showLobby(session.mode);
+      else showMainMenu();
     }
   }));
 }
@@ -327,8 +356,8 @@ function showMainMenu(){
   menu.setOverlay(null);
   menu.setScreen(MainMenuScreen({
     mode: session.mode,
-    onMode: (m)=> showMapSelect(m),
-    onPlay: ()=> showMapSelect(session.mode),
+    onMode: (m)=> showLobby(m),
+    onPlay: ()=> showLobby(session.mode),
     onClass: ()=> showClassSelect(),
     onSettings: ()=> showSettings({ overlay:false }),
   }));

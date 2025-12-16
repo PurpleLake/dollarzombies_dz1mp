@@ -80,6 +80,19 @@ if(msg.t === "killed"){
   return;
 }
 
+    if(msg.t === "lobby_ready"){
+      this.engine?.events?.emit?.("lobby:ready", { playerId: msg.playerId, ready: msg.ready });
+      return;
+    }
+    if(msg.t === "lobby_vote"){
+      this.engine?.events?.emit?.("lobby:vote", { playerId: msg.playerId, mapId: msg.mapId });
+      return;
+    }
+    if(msg.t === "lobby_motd"){
+      this.engine?.events?.emit?.("lobby:motd", { text: msg.text });
+      return;
+    }
+
     if(msg.t === "state"){
       // full roster snapshot
       const prev = this._prevHp;
@@ -109,6 +122,18 @@ if(msg.t === "killed"){
 
   _send(obj){
     try { this.ws?.send(JSON.stringify(obj)); } catch {}
+  }
+
+  sendLobbyReady(ready){
+    this._send({ t:"lobby_ready", playerId: this.clientId, ready: Boolean(ready) });
+  }
+
+  sendLobbyVote(mapId){
+    this._send({ t:"lobby_vote", playerId: this.clientId, mapId });
+  }
+
+  sendLobbyMotd(text){
+    this._send({ t:"lobby_motd", text });
   }
 
   sendLocalSnapshot({ pos, rot, hp, weaponId }){
