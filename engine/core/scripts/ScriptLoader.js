@@ -4,6 +4,7 @@ export class ScriptLoader {
   constructor({ engine }){
     this.engine = engine;
     this.files = [];
+    this.baseUrl = "";
     this.dzs = new DzsRuntime({ events: engine.events, ctx: engine.ctx });
     // expose to engine context for dev UI
     engine.ctx.scripts = this;
@@ -58,6 +59,20 @@ export class ScriptLoader {
     if(!res.ok) throw new Error(`Manifest load failed: ${res.status} ${url}`);
     const json = await res.json();
     this.files = Array.isArray(json.files) ? json.files.slice() : [];
+    try {
+      const resolved = new URL(url, window.location.href);
+      this.baseUrl = resolved.href.replace(/[^/]*$/, "");
+    } catch {
+      this.baseUrl = "";
+    }
+  }
+
+  resolveFileUrl(path){
+    if(!path) return path;
+    if(/^https?:\/\//i.test(path)) return path;
+    if(path.startsWith("/")) return path;
+    if(this.baseUrl) return this.baseUrl + path;
+    return "/" + path.replace(/^\//, "");
   }
 
   async loadAll(){
@@ -65,9 +80,10 @@ export class ScriptLoader {
     this.jsModules.length = 0;
 
     for(const f of this.files){
+      const fileUrl = this.resolveFileUrl(f);
       this.engine.events.emit("log", { msg: `[scripts] loading: ${f}` });
       if(f.endsWith(".dzs")){
-        const res = await fetch("/" + f.replace(/^\//,""), { cache:"no-store" });
+        const res = await fetch(fileUrl, { cache:"no-store" });
         if(!res.ok) throw new Error(`DZS load failed: ${res.status} ${f}`);
         const text = await res.text();
         this.dzs.loadText(text, f);
@@ -75,7 +91,7 @@ export class ScriptLoader {
       } else if (f.endsWith(".js")) {
         let mod;
         try{
-          mod = await import("/" + f.replace(/^\//,"") + `?v=${Date.now()}`);
+          mod = await import(fileUrl + `?v=${Date.now()}`);
         } catch (e){
           this.engine.events.emit("log", { msg: `[scripts] JS import failed: ${f}` });
           throw e;

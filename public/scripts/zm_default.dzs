@@ -1,30 +1,5 @@
+// Minimal DZS script using supported "call" syntax.
 on zm:build {
-  // register a couple shop items
-  shopRegister wall_m4 500 weapon "M4 Wallbuy"
-  shopRegister door_1 750 door "Door 1"
-
-  // show cash for Player0
-  players = getAllPlayers();
-  if(players.length > 0){
-    createHudText players[0] #7aa0ff 20 80 "CASH SYSTEM READY" neon
-  }
-}
-
-
-on zm:build {
-  wallbuy = spawnModel box wallbuy 3 0 4
-}
-
-on zm:tick {
-  players = getAllPlayers();
-  if(players.length == 0) return;
-  p = players[0];
-
-  d = distanceToPlayer(p, wallbuy);
-  if(d < 3){
-    ok = purchase(p, "ar_m4");
-    if(ok){
-      toast Purchased ar_m4
-    }
-  }
+  call createHudText p0 #7aa0ff 20 80 "CASH SYSTEM READY" neon
+  call log ZM scripts loaded
 }

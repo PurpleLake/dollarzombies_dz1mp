@@ -200,9 +200,24 @@ options.onChange((data, key, value)=>{
 async function loadAllScripts(mode=session.mode){
   if(logEl) logEl.innerHTML = "";
   uiLog("Loading manifest...");
-  const manifest = (mode === "mp") ? "/scripts/mp_manifest.json" : "/scripts/manifest.json";
+  const manifestCandidates = (mode === "mp")
+    ? ["/public/scripts/mp_manifest.json", "/scripts/mp_manifest.json"]
+    : ["/public/scripts/manifest.json", "/scripts/manifest.json"];
   scripts.dzs?.clear?.();
-  await scripts.loadManifest(manifest);
+  let loaded = false;
+  let lastErr = null;
+  for(const manifest of manifestCandidates){
+    try {
+      await scripts.loadManifest(manifest);
+      loaded = true;
+      break;
+    } catch (err){
+      lastErr = err;
+    }
+  }
+  if(!loaded){
+    throw lastErr || new Error("Manifest load failed");
+  }
   uiLog("Loading scripts...");
   await scripts.loadAll();
   uiLog("Binding DZS handlers...");
