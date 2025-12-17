@@ -7,146 +7,227 @@ function injectStyles(){
   style.textContent = `
     .dz-lobby-screen{
       background:
-        radial-gradient(circle at 20% 30%, color-mix(in srgb, var(--ui-accent) 14%, transparent), transparent 45%),
-        radial-gradient(circle at 80% 70%, color-mix(in srgb, var(--ui-accent2) 16%, transparent), transparent 50%),
-        rgba(0,0,0,0.70);
+        repeating-linear-gradient(135deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 6px),
+        radial-gradient(circle at 18% 20%, rgba(110,140,110,0.18), transparent 40%),
+        radial-gradient(circle at 82% 70%, rgba(200,140,60,0.14), transparent 45%),
+        rgba(4,6,8,0.92);
       color: var(--ui-text);
-      font-family: var(--ui-font);
-      padding: 18px;
+      font-family: "Bahnschrift", "Agency FB", "Arial Narrow", var(--ui-font);
+      padding: 12px;
       box-sizing: border-box;
     }
     .dz-lobby-screen.dz-lobby-mp{
       background:
-        repeating-linear-gradient(45deg, rgba(34,46,34,0.55) 0px, rgba(34,46,34,0.55) 12px, rgba(18,24,18,0.55) 12px, rgba(18,24,18,0.55) 24px),
-        radial-gradient(circle at 12% 18%, rgba(88,116,88,0.35), transparent 35%),
-        radial-gradient(circle at 80% 72%, rgba(56,78,56,0.30), transparent 38%),
-        #0b100b;
+        repeating-linear-gradient(135deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 6px),
+        radial-gradient(circle at 12% 18%, rgba(90,110,90,0.34), transparent 40%),
+        radial-gradient(circle at 80% 70%, rgba(70,90,70,0.30), transparent 45%),
+        #0a0f0a;
     }
     .dz-lobby-layout{
-      width: min(1280px, 96vw);
-      height: min(90vh, 880px);
+      width: min(1200px, 95vw);
+      height: min(84vh, 760px);
       display: grid;
-      grid-template-columns: minmax(320px, 38%) 1fr;
-      gap: 16px;
-      background: color-mix(in srgb, var(--ui-panel) 70%, rgba(0,0,0,0.45));
-      border: 1px solid var(--ui-panel-border);
-      border-radius: 18px;
-      box-shadow: 0 18px 50px var(--ui-shadow);
-      padding: 14px;
+      grid-template-columns: minmax(300px, 36%) 1fr;
+      gap: 10px;
+      background: rgba(6,8,12,0.55);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.6);
+      padding: 10px;
       position: relative;
       overflow: hidden;
     }
+    .dz-lobby-layout::after{
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(0,0,0,0.55), transparent 16%, transparent 84%, rgba(0,0,0,0.6));
+      pointer-events: none;
+      z-index: 0;
+    }
+    .dz-lobby-layout > *{
+      position: relative;
+      z-index: 1;
+    }
     .dz-lobby-panel{
-      background: rgba(0,0,0,0.25);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 14px;
-      padding: 12px;
+      background: linear-gradient(180deg, rgba(16,20,28,0.7), rgba(8,10,14,0.85));
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      padding: 10px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
       min-height: 0;
+      position: relative;
+      overflow: hidden;
+      animation: dz-lobby-panel-in 220ms ease-out both;
+    }
+    .dz-lobby-panel:nth-child(2){
+      animation-delay: 60ms;
+    }
+    .dz-lobby-panel::before{
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.06), transparent 35%, rgba(0,0,0,0.35)),
+        linear-gradient(90deg, rgba(255,255,255,0.05), transparent 45%);
+      opacity: 0.65;
+      pointer-events: none;
+    }
+    .dz-lobby-panel > *{
+      position: relative;
+      z-index: 1;
     }
     .dz-lobby-title{
-      font-size: 22px;
-      font-weight: 950;
+      font-size: 16px;
+      font-weight: 900;
       margin: 0;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
     }
     .dz-lobby-sub{
       color: var(--ui-text-dim);
       margin: 0;
-      font-size: 13px;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+    }
+    .dz-lobby-label{
+      color: var(--ui-text-dim);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+    .dz-lobby-screen .dz-btn{
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: #f2f2f2;
+    }
+    .dz-lobby-screen .dz-btn.dz-secondary{
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .dz-lobby-screen .dz-btn:hover{
+      animation: dz-lobby-text-fade 1.1s ease-in-out infinite;
+      filter: none;
     }
     .dz-lobby-map-row{
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
       width: 100%;
       pointer-events: auto;
-      margin-top: 6px;
+      margin-top: 4px;
     }
     .dz-lobby-map-card{
       width: 100%;
       position: relative;
-      border-radius: 16px;
+      border-radius: 6px;
       overflow: hidden;
-      border: 1px solid rgba(255,255,255,0.10);
-      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(0,0,0,0.35);
       cursor: pointer;
-      transition: transform 120ms ease, box-shadow 120ms ease;
+      transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
       display: grid;
-      grid-template-rows: 120px auto;
+      grid-template-rows: 96px auto;
     }
     .dz-lobby-map-card:hover{
-      transform: translateY(-3px);
-      box-shadow: 0 14px 32px rgba(0,0,0,0.45);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.45);
+      border-color: rgba(255,255,255,0.22);
     }
     .dz-lobby-map-card.disabled{
       cursor: not-allowed;
-      opacity: 0.65;
-      filter: grayscale(0.35);
+      opacity: 0.6;
+      filter: grayscale(0.45) contrast(0.9);
     }
     .dz-lobby-map-img{
       width: 100%;
       height: 100%;
       object-fit: cover;
-      background: linear-gradient(135deg, rgba(31,38,66,0.9), rgba(18,22,40,0.9));
+      background: linear-gradient(135deg, rgba(30,35,55,0.9), rgba(14,16,28,0.95));
+      position: relative;
+    }
+    .dz-lobby-map-img::after{
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(0,0,0,0.05), rgba(0,0,0,0.55));
+      pointer-events: none;
     }
     .dz-lobby-map-body{
-      padding: 10px 12px 12px 12px;
+      padding: 8px 10px 10px 10px;
       display: grid;
-      gap: 4px;
+      gap: 2px;
     }
     .dz-lobby-map-name{
       font-weight: 800;
-      letter-spacing: 0.02em;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-size: 13px;
+      color: var(--ui-text);
+    }
+    .dz-lobby-map-card:hover .dz-lobby-map-name{
+      animation: dz-lobby-text-fade 1.1s ease-in-out infinite;
+    }
+    .dz-lobby-map-card:hover .dz-lobby-map-body .dz-lobby-sub{
+      animation: dz-lobby-text-fade 1.1s ease-in-out infinite;
     }
     .dz-lobby-map-votes{
       position: absolute;
-      right: 10px;
-      top: 10px;
-      padding: 6px 10px;
-      border-radius: 12px;
-      background: color-mix(in srgb, var(--ui-panel) 60%, rgba(0,0,0,0.65));
-      border: 1px solid color-mix(in srgb, var(--ui-accent) 35%, transparent);
+      right: 6px;
+      top: 6px;
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: rgba(0,0,0,0.7);
+      border: 1px solid rgba(255,255,255,0.18);
       font-weight: 800;
-      font-size: 12px;
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
     }
     .dz-lobby-players{
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 6px;
       flex: 1;
       min-height: 0;
       overflow-y: auto;
-      padding-right: 4px;
+      padding-right: 2px;
     }
     .dz-lobby-slot{
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 12px;
-      padding: 8px 10px;
-      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      padding: 6px 8px;
+      background: rgba(0,0,0,0.32);
       display: flex;
       justify-content: space-between;
       gap: 10px;
       align-items: center;
-      min-height: 40px;
+      min-height: 34px;
+      font-size: 12px;
     }
     .dz-lobby-slot-empty{
       color: var(--ui-text-dim);
       font-style: italic;
     }
     .dz-lobby-dot{
-      width: 10px;
-      height: 10px;
+      width: 8px;
+      height: 8px;
       border-radius: 999px;
-      margin-right: 8px;
+      margin-right: 6px;
       background: gray;
       box-shadow: 0 0 0 1px rgba(255,255,255,0.1);
     }
     .dz-lobby-row{
       display: flex;
-      gap: 10px;
+      gap: 8px;
       flex-wrap: wrap;
       align-items: center;
     }
@@ -155,12 +236,52 @@ function injectStyles(){
       left: 0;
       right: 0;
       bottom: 0;
-      padding: 10px 14px;
-      background: rgba(5,6,10,0.70);
-      border-top: 1px solid var(--ui-panel-border);
+      padding: 8px 12px;
+      background: rgba(4,6,8,0.82);
+      border-top: 1px solid rgba(255,255,255,0.08);
       font-weight: 700;
-      letter-spacing: 0.01em;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      font-size: 11px;
       pointer-events: none;
+    }
+    .dz-lobby-pending{
+      opacity: 0.7;
+    }
+    .dz-lobby-pending-dot{
+      animation: dz-lobby-pulse 1.6s ease-in-out infinite;
+    }
+    .dz-lobby-pending-text{
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+    .dz-lobby-pending-text::after{
+      content: "...";
+      display: inline-block;
+      width: 0;
+      overflow: hidden;
+      vertical-align: bottom;
+      animation: dz-lobby-ellipsis 1.3s steps(4, end) infinite;
+    }
+    @keyframes dz-lobby-panel-in{
+      from{opacity:0; transform:translateY(6px);}
+      to{opacity:1; transform:translateY(0);}
+    }
+    @keyframes dz-lobby-card-in{
+      from{opacity:0; transform:translateY(6px);}
+      to{opacity:1; transform:translateY(0);}
+    }
+    @keyframes dz-lobby-text-fade{
+      0%{color:#ffffff;}
+      50%{color:#0a0a0a;}
+      100%{color:#ffffff;}
+    }
+    @keyframes dz-lobby-pulse{
+      0%, 100%{opacity:0.35;}
+      50%{opacity:1;}
+    }
+    @keyframes dz-lobby-ellipsis{
+      to{width:3ch;}
     }
   `;
   document.head.appendChild(style);
@@ -175,6 +296,8 @@ export class LobbyUI {
     this.onStart = onStart;
     this.onCreateClass = onCreateClass;
     this.getLocalPlayerId = getLocalPlayerId || (()=>null);
+    this.mapCards = new Map();
+    this.mapOrder = [];
 
     injectStyles();
     this.screen = document.createElement("div");
@@ -204,6 +327,7 @@ export class LobbyUI {
     this.modeSub = document.createElement("div");
     this.modeSub.className = "dz-lobby-sub";
     this.modeSub.textContent = "";
+    this.modeSub.classList.add("dz-lobby-label");
 
     const actionRow = document.createElement("div");
     actionRow.className = "dz-lobby-row";
@@ -213,20 +337,20 @@ export class LobbyUI {
     actionRow.appendChild(this.classBtn);
 
     const voteLabel = document.createElement("div");
-    voteLabel.className = "dz-lobby-sub";
+    voteLabel.className = "dz-lobby-sub dz-lobby-label";
     voteLabel.textContent = "Map Vote";
 
     this.readyBtn = Button({ text:"Ready Up", onClick: ()=>this.onReadyToggle?.() });
     this.readyStatus = document.createElement("div");
-    this.readyStatus.className = "dz-lobby-sub";
+    this.readyStatus.className = "dz-lobby-sub dz-lobby-label";
     this.readyStatus.style.fontWeight = "700";
-    this.readyStatus.style.fontSize = "14px";
+    this.readyStatus.style.fontSize = "11px";
 
     this.startRow = document.createElement("div");
     this.startRow.className = "dz-lobby-row";
     this.startBtn = Button({ text:"Start (Host)", onClick: ()=>this.onStart?.() });
     this.waitingLabel = document.createElement("div");
-    this.waitingLabel.className = "dz-lobby-sub";
+    this.waitingLabel.className = "dz-lobby-sub dz-lobby-label";
     this.waitingLabel.textContent = "Waiting for host...";
     this.startRow.appendChild(this.startBtn);
     this.startRow.appendChild(this.waitingLabel);
@@ -299,52 +423,70 @@ export class LobbyUI {
   }
 
   renderMaps(localId){
-    this.mapRow.innerHTML = "";
+    const maps = this.state.maps;
     const counts = this.state.getVoteCounts();
     const localVote = localId ? this.state.getPlayerVote(localId) : null;
+    const mapIds = maps.map(map => String(map.id));
+    const sameOrder = mapIds.length === this.mapOrder.length
+      && mapIds.every((id, i) => id === this.mapOrder[i]);
 
-    for(const map of this.state.maps){
-      const card = document.createElement("div");
-      card.className = "dz-lobby-map-card";
-      if(map.disabled || !map.entryScript) card.classList.add("disabled");
-      if(localVote && String(localVote) === String(map.id)){
-        card.style.outline = "2px solid var(--ui-accent)";
-        card.style.outlineOffset = "-2px";
+    if(!sameOrder){
+      this.mapOrder = mapIds;
+      this.mapCards.clear();
+      this.mapRow.innerHTML = "";
+      for(const map of maps){
+        const card = document.createElement("div");
+        card.className = "dz-lobby-map-card";
+        const img = document.createElement("div");
+        img.className = "dz-lobby-map-img";
+        card.appendChild(img);
+
+        const body = document.createElement("div");
+        body.className = "dz-lobby-map-body";
+        const name = document.createElement("div");
+        name.className = "dz-lobby-map-name";
+        const desc = document.createElement("div");
+        desc.className = "dz-lobby-sub";
+        body.appendChild(name);
+        body.appendChild(desc);
+        card.appendChild(body);
+
+        const badge = document.createElement("div");
+        badge.className = "dz-lobby-map-votes";
+        card.appendChild(badge);
+
+        this.mapRow.appendChild(card);
+        this.mapCards.set(String(map.id), { card, img, name, desc, badge });
       }
-      const img = document.createElement("div");
-      img.className = "dz-lobby-map-img";
+    }
+
+    for(const map of maps){
+      const entry = this.mapCards.get(String(map.id));
+      if(!entry) continue;
+      const { card, img, name, desc, badge } = entry;
+      const isDisabled = Boolean(map.disabled || !map.entryScript);
+      card.classList.toggle("disabled", isDisabled);
+      if(localVote && String(localVote) === String(map.id)){
+        card.style.outline = "1px solid var(--ui-accent)";
+        card.style.outlineOffset = "-1px";
+      } else {
+        card.style.outline = "";
+        card.style.outlineOffset = "";
+      }
       img.style.backgroundImage = map.preview ? `url(${map.preview})` : "linear-gradient(135deg,#1f2642,#0e1322)";
-      card.appendChild(img);
-
-      const body = document.createElement("div");
-      body.className = "dz-lobby-map-body";
-      const name = document.createElement("div");
-      name.className = "dz-lobby-map-name";
       name.textContent = map.name || map.id;
-      const desc = document.createElement("div");
-      desc.className = "dz-lobby-sub";
-      desc.textContent = map.desc || (map.disabled ? "Coming soon." : "");
-      body.appendChild(name);
-      body.appendChild(desc);
-      card.appendChild(body);
-
-      const badge = document.createElement("div");
-      badge.className = "dz-lobby-map-votes";
+      desc.textContent = map.desc || (isDisabled ? "Coming soon." : "");
       const votes = counts.get(String(map.id)) || 0;
       badge.textContent = `Votes: ${votes}`;
-      card.appendChild(badge);
-
-      if(map.disabled || !map.entryScript){
-        card.addEventListener("click", ()=>{
+      if(isDisabled){
+        card.onclick = ()=>{
           this.waitingLabel.textContent = "Coming soon";
-        });
+        };
       } else {
-        card.addEventListener("click", ()=>{
+        card.onclick = ()=>{
           this.onVote?.(map.id);
-        });
+        };
       }
-
-      this.mapRow.appendChild(card);
     }
   }
 
@@ -390,15 +532,18 @@ export class LobbyUI {
         const vote = voteLookup.get(String(p.id));
         const voteText = document.createElement("div");
         voteText.className = "dz-lobby-sub";
-        voteText.style.fontSize = "12px";
+        voteText.style.fontSize = "10px";
         voteText.textContent = vote ? `Vote: ${mapsById.get(String(vote))?.name || vote}` : "No vote";
 
         slot.appendChild(left);
         slot.appendChild(voteText);
       } else {
+        slot.classList.add("dz-lobby-pending");
         dot.style.background = "rgba(255,255,255,0.15)";
+        dot.classList.add("dz-lobby-pending-dot");
         const empty = document.createElement("div");
         empty.className = "dz-lobby-slot-empty";
+        empty.classList.add("dz-lobby-pending-text");
         empty.textContent = "pending player...";
         left.appendChild(dot);
         left.appendChild(empty);

@@ -7,35 +7,57 @@ function modeCard({ title, desc, imgA, imgB, onPick }){
   card.style.cursor="pointer";
   card.style.display="grid";
   card.style.gridTemplateRows="auto 1fr";
-  card.style.border="1px solid rgba(255,255,255,0.10)";
-  card.style.background="rgba(0,0,0,0.20)";
-  card.style.borderRadius="16px";
+  card.style.border="1px solid rgba(255,255,255,0.14)";
+  card.style.background="rgba(0,0,0,0.35)";
+  card.style.borderRadius="6px";
   card.style.overflow="hidden";
-  card.style.minHeight="220px";
+  card.style.minHeight="200px";
+  card.style.transition="transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease";
 
   const img = document.createElement("img");
   img.src = imgA;
   img.alt = title;
   img.style.width="100%";
-  img.style.height="160px";
+  img.style.height="140px";
   img.style.objectFit="cover";
   img.style.display="block";
 
-  card.addEventListener("mouseenter", ()=>{ img.src = imgB; });
-  card.addEventListener("mouseleave", ()=>{ img.src = imgA; });
+  function setHover(active){
+    const anim = active ? "dz-ui-text-fade 1.1s ease-in-out infinite" : "";
+    h.style.animation = anim;
+    p.style.animation = anim;
+  }
+  card.addEventListener("mouseenter", ()=>{
+    img.src = imgB;
+    card.style.transform = "translateY(-2px)";
+    card.style.boxShadow = "0 10px 24px rgba(0,0,0,0.45)";
+    card.style.borderColor = "rgba(255,255,255,0.22)";
+    setHover(true);
+  });
+  card.addEventListener("mouseleave", ()=>{
+    img.src = imgA;
+    card.style.transform = "";
+    card.style.boxShadow = "";
+    card.style.borderColor = "";
+    setHover(false);
+  });
   card.addEventListener("click", ()=>onPick?.());
 
   const body = document.createElement("div");
-  body.style.padding="12px";
+  body.style.padding="10px";
 
   const h = document.createElement("div");
-  h.style.fontWeight="950";
-  h.style.fontSize="18px";
+  h.style.fontWeight="900";
+  h.style.fontSize="14px";
+  h.style.letterSpacing="0.16em";
+  h.style.textTransform="uppercase";
   h.textContent = title;
 
   const p = document.createElement("div");
   p.className="dz-help";
   p.style.marginTop="6px";
+  p.style.fontSize="11px";
+  p.style.letterSpacing="0.04em";
   p.textContent = desc;
 
   body.appendChild(h);
@@ -53,7 +75,7 @@ export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode 
   const panel = document.createElement("div");
   panel.className = "dz-panel";
   panel.style.width = "min(980px, 94vw)";
-  panel.style.padding = "18px";
+  panel.style.padding = "12px";
 
   const title = document.createElement("h1");
   title.className = "dz-title";
@@ -66,8 +88,8 @@ export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode 
   const grid = document.createElement("div");
   grid.style.display="grid";
   grid.style.gridTemplateColumns="1fr 1fr";
-  grid.style.gap="14px";
-  grid.style.marginTop="14px";
+  grid.style.gap="10px";
+  grid.style.marginTop="10px";
 
   const zm = modeCard({
     title:"Zombies (Co-op)",
@@ -90,14 +112,14 @@ export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode 
 
   const row = document.createElement("div");
   row.className = "dz-row";
-  row.style.marginTop="14px";
+  row.style.marginTop="10px";
   row.appendChild(Button({ text: (mode==="mp" ? "Start Multiplayer" : "Start Zombies"), onClick: ()=>onPlay?.() }));
   row.appendChild(Button({ text:"Loadout", variant:"secondary", onClick: ()=>onClass?.() }));
   row.appendChild(Button({ text:"Settings", variant:"secondary", onClick: ()=>onSettings?.() }));
 
   const hint = document.createElement("div");
   hint.className = "dz-help";
-  hint.style.marginTop="10px";
+  hint.style.marginTop="8px";
   hint.textContent = "In-game: Mouse Wheel or 1-6 switch weapons, R reload, Esc pause.";
 
   panel.appendChild(title);

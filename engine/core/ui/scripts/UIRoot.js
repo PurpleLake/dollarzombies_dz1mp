@@ -40,17 +40,17 @@ export class UIRoot {
     style.textContent = `
       :root{
         --ui-bg:#05060a;
-        --ui-panel:rgba(18,22,40,0.78);
-        --ui-panel-border:rgba(120,160,255,0.25);
-        --ui-text:#e8ecff;
-        --ui-text-dim:rgba(232,236,255,0.75);
+        --ui-panel:rgba(14,18,26,0.82);
+        --ui-panel-border:rgba(255,255,255,0.12);
+        --ui-text:#f2f5f8;
+        --ui-text-dim:rgba(242,245,248,0.72);
         --ui-accent:#7aa0ff;
         --ui-accent2:#ffb450;
         --ui-shadow:rgba(0,0,0,0.45);
         --ui-focus:rgba(122,160,255,0.45);
-        --ui-radius:16px;
-        --ui-gap:10px;
-        --ui-font: system-ui, Segoe UI, Roboto, Arial;
+        --ui-radius:6px;
+        --ui-gap:8px;
+        --ui-font: "Bahnschrift", "Agency FB", "Arial Narrow", system-ui, Segoe UI, Roboto, Arial;
         --ui-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono";
       }
 
@@ -58,25 +58,39 @@ export class UIRoot {
         position:absolute; inset:0;
         display:grid; place-items:center;
         background:
-          radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--ui-accent) 18%, transparent), transparent 45%),
-          radial-gradient(circle at 70% 70%, color-mix(in srgb, var(--ui-accent2) 14%, transparent), transparent 45%),
-          rgba(0,0,0,0.62);
+          repeating-linear-gradient(135deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 6px),
+          radial-gradient(circle at 18% 20%, rgba(110,140,110,0.18), transparent 40%),
+          radial-gradient(circle at 82% 70%, rgba(200,140,60,0.14), transparent 45%),
+          rgba(4,6,8,0.9);
         pointer-events:auto;
       }
 
       .dz-panel{
         width:min(780px, 92vw);
-        background:var(--ui-panel);
+        background:linear-gradient(180deg, rgba(16,20,28,0.7), rgba(8,10,14,0.85));
         border:1px solid var(--ui-panel-border);
         border-radius:var(--ui-radius);
-        box-shadow: 0 12px 40px var(--ui-shadow);
+        box-shadow: 0 14px 40px var(--ui-shadow);
         color:var(--ui-text);
         font-family:var(--ui-font);
-        padding:16px;
+        padding:12px;
+        position:relative;
+        overflow:hidden;
+      }
+      .dz-panel::before{
+        content:"";
+        position:absolute;
+        inset:0;
+        background:linear-gradient(180deg, rgba(255,255,255,0.04), transparent 40%, rgba(0,0,0,0.35));
+        pointer-events:none;
+      }
+      .dz-panel > *{
+        position:relative;
+        z-index:1;
       }
 
-      .dz-title{font-size:20px;margin:0 0 6px 0}
-      .dz-sub{margin:0 0 12px 0;color:var(--ui-text-dim);line-height:1.35}
+      .dz-title{font-size:16px;margin:0 0 6px 0;letter-spacing:0.18em;text-transform:uppercase}
+      .dz-sub{margin:0 0 10px 0;color:var(--ui-text-dim);line-height:1.35;font-size:11px;letter-spacing:0.04em}
 
       .dz-row{display:flex; gap:var(--ui-gap); align-items:center; flex-wrap:wrap}
       .dz-col{display:flex; flex-direction:column; gap:var(--ui-gap)}
@@ -84,19 +98,22 @@ export class UIRoot {
 
       .dz-btn{
         pointer-events:auto; cursor:pointer;
-        border:1px solid color-mix(in srgb, var(--ui-accent) 35%, transparent);
-        background: color-mix(in srgb, var(--ui-panel) 30%, rgba(30,36,70,0.9));
-        color:var(--ui-text);
-        padding:10px 12px;
-        border-radius:14px;
+        border:1px solid rgba(255,255,255,0.18);
+        background: rgba(0,0,0,0.4);
+        color:#f2f2f2;
+        padding:6px 10px;
+        border-radius:6px;
         font-weight:700;
+        font-size:11px;
+        letter-spacing:0.16em;
+        text-transform:uppercase;
         user-select:none;
       }
-      .dz-btn:hover{filter:brightness(1.08)}
+      .dz-btn:hover{animation:dz-ui-text-fade 1.1s ease-in-out infinite;filter:none}
       .dz-btn:active{transform:translateY(1px)}
       .dz-btn.dz-secondary{
-        border:1px solid color-mix(in srgb, var(--ui-panel-border) 60%, transparent);
-        background: color-mix(in srgb, var(--ui-panel) 70%, rgba(0,0,0,0.25));
+        border:1px solid rgba(255,255,255,0.12);
+        background: rgba(0,0,0,0.25);
       }
 
       .dz-field{
@@ -184,6 +201,11 @@ export class UIRoot {
         border-radius:14px;
         box-shadow: 0 10px 30px var(--ui-shadow);
         max-width:min(420px, 92vw);
+      }
+      @keyframes dz-ui-text-fade{
+        0%{color:#ffffff;}
+        50%{color:#0a0a0a;}
+        100%{color:#ffffff;}
       }
     `;
     document.head.appendChild(style);

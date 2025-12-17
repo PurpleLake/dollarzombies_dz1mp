@@ -6,12 +6,13 @@ function MapCard({ map, selected, onSelect }){
   card.style.all = "unset";
   card.style.cursor = map.disabled ? "not-allowed" : "pointer";
   card.style.display = "grid";
-  card.style.gridTemplateRows = "140px 1fr";
-  card.style.border = selected ? "2px solid var(--ui-accent)" : "1px solid rgba(255,255,255,0.12)";
-  card.style.background = "rgba(0,0,0,0.2)";
-  card.style.borderRadius = "14px";
+  card.style.gridTemplateRows = "120px 1fr";
+  card.style.border = selected ? "1px solid var(--ui-accent)" : "1px solid rgba(255,255,255,0.14)";
+  card.style.background = "rgba(0,0,0,0.35)";
+  card.style.borderRadius = "6px";
   card.style.overflow = "hidden";
   card.style.opacity = map.disabled ? "0.6" : "1";
+  card.style.transition = "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease";
 
   const img = document.createElement("div");
   img.style.background = map.preview ? `center / cover url(${map.preview})` : "linear-gradient(145deg, #1f2642, #151a2b)";
@@ -25,11 +26,15 @@ function MapCard({ map, selected, onSelect }){
 
   const name = document.createElement("div");
   name.style.fontWeight = "900";
-  name.style.fontSize = "16px";
+  name.style.fontSize = "13px";
+  name.style.letterSpacing = "0.16em";
+  name.style.textTransform = "uppercase";
   name.textContent = map.name;
 
   const desc = document.createElement("div");
   desc.className = "dz-help";
+  desc.style.fontSize = "11px";
+  desc.style.letterSpacing = "0.04em";
   desc.textContent = map.desc || "";
 
   body.appendChild(name);
@@ -41,6 +46,22 @@ function MapCard({ map, selected, onSelect }){
   if(!map.disabled){
     card.addEventListener("click", ()=>onSelect?.(map.id));
   }
+  card.addEventListener("mouseenter", ()=>{
+    name.style.animation = "dz-ui-text-fade 1.1s ease-in-out infinite";
+    desc.style.animation = "dz-ui-text-fade 1.1s ease-in-out infinite";
+    card.style.transform = "translateY(-2px)";
+    card.style.boxShadow = "0 10px 24px rgba(0,0,0,0.45)";
+    if(!selected){
+      card.style.borderColor = "rgba(255,255,255,0.22)";
+    }
+  });
+  card.addEventListener("mouseleave", ()=>{
+    name.style.animation = "";
+    desc.style.animation = "";
+    card.style.transform = "";
+    card.style.boxShadow = "";
+    card.style.borderColor = selected ? "var(--ui-accent)" : "rgba(255,255,255,0.14)";
+  });
 
   return card;
 }
@@ -53,7 +74,7 @@ export function MapSelectScreen({ mode="zm", maps=[], selectedId=null, onSelect,
   const panel = document.createElement("div");
   panel.className = "dz-panel";
   panel.style.width = "min(1100px, 94vw)";
-  panel.style.padding = "16px";
+  panel.style.padding = "12px";
 
   const title = document.createElement("h1");
   title.className = "dz-title";
@@ -68,8 +89,8 @@ export function MapSelectScreen({ mode="zm", maps=[], selectedId=null, onSelect,
   const grid = document.createElement("div");
   grid.style.display = "grid";
   grid.style.gridTemplateColumns = "repeat(auto-fit, minmax(240px, 1fr))";
-  grid.style.gap = "12px";
-  grid.style.marginTop = "12px";
+  grid.style.gap = "10px";
+  grid.style.marginTop = "10px";
 
   function renderCards(){
     grid.innerHTML = "";
@@ -90,7 +111,7 @@ export function MapSelectScreen({ mode="zm", maps=[], selectedId=null, onSelect,
 
   const actions = document.createElement("div");
   actions.className = "dz-row";
-  actions.style.marginTop = "12px";
+  actions.style.marginTop = "10px";
   actions.appendChild(Button({ text: "Back", variant: "secondary", onClick: ()=>onBack?.() }));
   actions.appendChild(Button({ text: "Play", onClick: ()=>onPlay?.(current), variant: "primary" }));
 
