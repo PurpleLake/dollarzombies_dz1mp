@@ -1,5 +1,5 @@
-// Minimal DZS script using supported "call" syntax.
+// Minimal DZS script using supported single-line statements.
 on mp:build {
-  call createHudText p0 #2ef2c6 20 80 "MP SYSTEM READY" neon
-  call log MP scripts loaded
+  createHudText p0 #2ef2c6 20 80 MP_SYSTEM_READY neon
+  log MP scripts loaded
 }

@@ -8,6 +8,14 @@ export const zmMaps = [
     entryScript: "/engine/game/zm/maps/zm_facility/scripts/map.js",
   },
   {
+    id: "zm_silo",
+    name: "Silo",
+    desc: "Central tower with tight outer lanes.",
+    preview: "/public/assets/modes/zm_hover.png",
+    root: "/engine/game/zm/maps/zm_silo",
+    entryScript: "/engine/game/zm/maps/zm_silo/scripts/map.js",
+  },
+  {
     id: "zm_comingsoon",
     name: "Coming Soon",
     desc: "Additional co-op battlegrounds are being built.",

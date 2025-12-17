@@ -8,6 +8,14 @@ export const mpMaps = [
     entryScript: "/engine/game/mp/maps/mp_arena/scripts/map.js",
   },
   {
+    id: "mp_outpost",
+    name: "Outpost",
+    desc: "Mid-lane control with side cover.",
+    preview: "/public/assets/modes/mp_hover.png",
+    root: "/engine/game/mp/maps/mp_outpost",
+    entryScript: "/engine/game/mp/maps/mp_outpost/scripts/map.js",
+  },
+  {
     id: "mp_comingsoon",
     name: "Coming Soon",
     desc: "Prototype battlegrounds in progress.",

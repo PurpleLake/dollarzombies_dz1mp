@@ -1,5 +1,5 @@
-// Minimal DZS script using supported "call" syntax.
+// Minimal DZS script using supported single-line statements.
 on zm:build {
-  call createHudText p0 #7aa0ff 20 80 "CASH SYSTEM READY" neon
-  call log ZM scripts loaded
+  createHudText p0 #7aa0ff 20 80 CASH_SYSTEM_READY neon
+  log ZM scripts loaded
 }
