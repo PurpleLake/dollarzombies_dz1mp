@@ -1,6 +1,38 @@
 import { Button } from "../widgets/Button.js";
 import { ListBox } from "../widgets/ListBox.js";
 
+const GSC_SAMPLE_PATH = "/public/scripts/gsc_sample.dzs";
+const GSC_SAMPLE_TEXT = `# GSC-style sample script for custom modes.
+
+on onGameStart {
+  level.wave = 1
+  level thread modeController()
+}
+
+modeController(){
+  endon "game_end"
+  while(true){
+    wait 30
+    level.wave = (level.wave || 1) + 1
+    iPrintLnAll ^3Wave:^7 level.wave
+  }
+}
+
+on onPlayerSpawned {
+  self thread playerDeathLoop()
+}
+
+playerDeathLoop(){
+  endon "disconnect"
+  while(true){
+    waittill "death"
+    iPrintLnAll ^1Player died.
+  }
+}`;
+
+const MONACO_CDN = "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs";
+const MONACO_LANG = "dzs";
+
 function sectionTitle(text){
   const h = document.createElement("div");
   h.style.fontWeight = "950";
@@ -19,6 +51,101 @@ function mkCard(){
   c.style.padding = "12px";
   c.style.background = "rgba(0,0,0,0.22)";
   return c;
+}
+
+function loadMonaco(){
+  if(window.monaco) return Promise.resolve(window.monaco);
+  if(window.__dzsMonacoPromise) return window.__dzsMonacoPromise;
+  window.__dzsMonacoPromise = new Promise((resolve, reject)=>{
+    const loader = document.createElement("script");
+    loader.src = `${MONACO_CDN}/loader.min.js`;
+    loader.async = true;
+    loader.onload = ()=>{
+      try{
+        window.require.config({ paths: { vs: MONACO_CDN } });
+        window.require(["vs/editor/editor.main"], ()=> resolve(window.monaco));
+      } catch (err){
+        reject(err);
+      }
+    };
+    loader.onerror = reject;
+    document.head.appendChild(loader);
+  });
+  return window.__dzsMonacoPromise;
+}
+
+function registerDzsLanguage(monaco, docs){
+  if(window.__dzsMonacoLangRegistered) return;
+  window.__dzsMonacoLangRegistered = true;
+
+  monaco.languages.register({ id: MONACO_LANG });
+  monaco.languages.setMonarchTokensProvider(MONACO_LANG, {
+    tokenizer: {
+      root: [
+        [/#.*$/, "comment"],
+        [/\/\/.*$/, "comment"],
+        [/\bon\b/, "keyword"],
+        [/\b(wait|waittill|endon|notify|thread)\b/, "keyword"],
+        [/\b(self|level|event)\b/, "keyword"],
+        [/\b(true|false|null)\b/, "constant"],
+        [/"([^"\\]|\\.)*$/, "string.invalid"],
+        [/'([^'\\]|\\.)*$/, "string.invalid"],
+        [/"/, "string", "@string_dq"],
+        [/'/, "string", "@string_sq"],
+        [/\b\d+(\.\d+)?\b/, "number"],
+        [/\b[A-Za-z_][\w-]*\b/, "identifier"],
+      ],
+      string_dq: [
+        [/[^\\"]+/, "string"],
+        [/\\./, "string.escape"],
+        [/"/, "string", "@pop"],
+      ],
+      string_sq: [
+        [/[^\\']+/, "string"],
+        [/\\./, "string.escape"],
+        [/'/, "string", "@pop"],
+      ],
+    }
+  });
+  monaco.languages.setLanguageConfiguration(MONACO_LANG, {
+    comments: { lineComment: "//" },
+    brackets: [["{","}"], ["(",")"], ["[","]"]],
+    autoClosingPairs: [
+      { open: "{", close: "}" },
+      { open: "(", close: ")" },
+      { open: "[", close: "]" },
+      { open: "\"", close: "\"" },
+      { open: "'", close: "'" },
+    ],
+  });
+  monaco.languages.registerCompletionItemProvider(MONACO_LANG, {
+    provideCompletionItems: ()=>{
+      const list = Array.isArray(docs) ? docs : [];
+      const suggestions = list.map((d)=>({
+        label: d.name,
+        kind: monaco.languages.CompletionItemKind.Function,
+        insertText: d.name,
+        detail: d.sig,
+        documentation: d.desc || "",
+      }));
+      return { suggestions };
+    },
+  });
+}
+
+function toMonacoMarkers(errors){
+  const out = [];
+  for(const err of (errors || [])){
+    out.push({
+      severity: 8,
+      message: err.message || "Error",
+      startLineNumber: Math.max(1, Number(err.line || 1)),
+      startColumn: Math.max(1, Number(err.col || 1)),
+      endLineNumber: Math.max(1, Number(err.line || 1)),
+      endColumn: Math.max(1, Number(err.col || 1)) + 1,
+    });
+  }
+  return out;
 }
 
 export function DzsDevScreen({ engine, onClose }){
@@ -75,10 +202,31 @@ export function DzsDevScreen({ engine, onClose }){
     { value:"clients", label:"CLIENTS (PLAYERS)", meta:"input + stats" },
     { value:"servermaster", label:"SERVER MASTER", meta:"matches + queues" },
     { value:"dzs", label:"DSZ HELP", meta:"builtins + syntax" },
+    { value:"studio", label:"SCRIPT STUDIO", meta:"library + editor + inject" },
   ];
 
   let active = "dzs";
   let selectedMatchId = null;
+  let studioEditor = null;
+  let studioModel = null;
+  let studioEditorEl = null;
+  const studioState = {
+    library: [],
+    installed: [],
+    problems: [],
+    output: [],
+    queue: [],
+    current: { filename:"untitled.dzs", text:"" },
+  };
+  const studioRefs = {
+    libraryList: null,
+    installedList: null,
+    problemsList: null,
+    outputList: null,
+    searchInput: null,
+    fileLabel: null,
+    statusLine: null,
+  };
   const nav = ListBox({
     label: "Sections",
     items: navItems,
@@ -158,6 +306,276 @@ export function DzsDevScreen({ engine, onClose }){
 
   dzsControls.appendChild(searchWrap);
   dzsControls.appendChild(document.createElement("div")).className = "dz-spacer";
+
+  function getMatchId(){
+    return engine?.ctx?.matchSession?.matchId || null;
+  }
+
+  function getClientId(){
+    return engine?.ctx?.net?.clientId || null;
+  }
+
+  function isHost(){
+    const hostId = engine?.ctx?.matchSession?.hostPlayerId || null;
+    const clientId = getClientId();
+    if(!hostId || !clientId) return false;
+    return String(hostId) === String(clientId);
+  }
+
+  function isLobby(){
+    return engine?.ctx?.matchSession?.state === "LOBBY";
+  }
+
+  function studioLog(msg){
+    studioState.output.push({ msg: String(msg || ""), ts: Date.now() });
+    if(studioState.output.length > 200) studioState.output.shift();
+    renderStudioOutput();
+  }
+
+  function renderStudioOutput(){
+    const list = studioRefs.outputList;
+    if(!list) return;
+    list.innerHTML = "";
+    for(const line of studioState.output.slice(-120)){
+      const row = document.createElement("div");
+      row.className = "dz-help";
+      row.textContent = line.msg;
+      list.appendChild(row);
+    }
+    list.scrollTop = list.scrollHeight;
+  }
+
+  function renderStudioProblems(){
+    const list = studioRefs.problemsList;
+    if(!list) return;
+    list.innerHTML = "";
+    if(!studioState.problems.length){
+      const none = document.createElement("div");
+      none.className = "dz-help";
+      none.textContent = "No problems.";
+      list.appendChild(none);
+      return;
+    }
+    for(const p of studioState.problems){
+      const row = document.createElement("div");
+      row.className = "dz-help";
+      row.textContent = `L${p.line || 1}:C${p.col || 1} ${p.message || "Error"} | ${p.snippet || ""}`.trim();
+      list.appendChild(row);
+    }
+  }
+
+  function updateStudioStatus(){
+    if(!studioRefs.statusLine) return;
+    const host = isHost();
+    const lobby = isLobby();
+    const matchId = getMatchId() || "n/a";
+    const queued = studioState.queue.length;
+    studioRefs.statusLine.textContent = `Match: ${matchId} | Host: ${host ? "yes" : "no"} | Lobby: ${lobby ? "yes" : "no"} | Queued: ${queued}`;
+  }
+
+  function setEditorText(text, filename){
+    studioState.current.text = String(text || "");
+    studioState.current.filename = String(filename || "untitled.dzs");
+    if(studioRefs.fileLabel) studioRefs.fileLabel.textContent = studioState.current.filename;
+    if(studioModel) studioModel.setValue(studioState.current.text);
+  }
+
+  function getEditorText(){
+    if(studioModel) return studioModel.getValue();
+    return studioState.current.text || "";
+  }
+
+  function clearMarkers(){
+    if(window.monaco && studioModel){
+      window.monaco.editor.setModelMarkers(studioModel, "dzs", []);
+    }
+  }
+
+  async function validateCurrent(){
+    const text = getEditorText();
+    studioState.problems = [];
+    clearMarkers();
+    try{
+      const res = await fetch("/api/dzs/validate", {
+        method: "POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const data = await res.json();
+      if(!data?.ok){
+        studioState.problems = Array.isArray(data?.errors) ? data.errors : [];
+        if(window.monaco && studioModel){
+          window.monaco.editor.setModelMarkers(studioModel, "dzs", toMonacoMarkers(studioState.problems));
+        }
+        studioLog("Validation failed.");
+        renderStudioProblems();
+        return false;
+      }
+      studioLog("Validation ok.");
+      renderStudioProblems();
+      return true;
+    } catch (err){
+      studioLog(`Validation error: ${err?.message || err}`);
+      return false;
+    }
+  }
+
+  async function refreshLibrary(){
+    try{
+      const res = await fetch("/api/dzs/library");
+      const data = await res.json();
+      studioState.library = Array.isArray(data?.scripts) ? data.scripts : [];
+      renderStudioLibrary();
+    } catch (err){
+      studioLog(`Library load failed: ${err?.message || err}`);
+    }
+  }
+
+  async function refreshInstalled(){
+    try{
+      const matchId = getMatchId() || "global";
+      const res = await fetch(`/api/dzs/installed?matchId=${encodeURIComponent(matchId)}`, {
+        headers: {
+          "x-dzs-client-id": getClientId() || "",
+          "x-dzs-match-id": matchId,
+        },
+      });
+      const data = await res.json();
+      studioState.installed = Array.isArray(data?.scripts) ? data.scripts : [];
+      renderStudioInstalled();
+    } catch (err){
+      studioLog(`Installed list failed: ${err?.message || err}`);
+    }
+  }
+
+  function queueAction(action){
+    studioState.queue.push(action);
+    studioLog(`Queued: ${action.type} (${action.filename || action.scriptId || "script"})`);
+    updateStudioStatus();
+  }
+
+  async function flushQueue(){
+    if(!isLobby()) return;
+    if(!isHost()) return;
+    if(studioState.queue.length === 0) return;
+    studioLog(`Applying ${studioState.queue.length} queued change(s)...`);
+    const pending = studioState.queue.slice();
+    studioState.queue.length = 0;
+    for(const action of pending){
+      if(action.type === "inject"){
+        await injectScript({ filename: action.filename, text: action.text, skipQueue: true });
+      } else if(action.type === "disable"){
+        await disableScript(action.scriptId, true);
+      } else if(action.type === "unload"){
+        await unloadScript(action.scriptId, true);
+      }
+    }
+    updateStudioStatus();
+  }
+
+  async function injectScript({ filename, text, skipQueue=false } = {}){
+    const host = isHost();
+    if(!host){
+      studioLog("Inject blocked: host-only.");
+      return;
+    }
+    if(!isLobby()){
+      if(!skipQueue){
+        queueAction({ type:"inject", filename, text });
+      } else {
+        studioLog("Inject blocked: lobby-only.");
+      }
+      return;
+    }
+    const matchId = getMatchId() || "global";
+    const clientId = getClientId();
+    const res = await fetch("/api/dzs/inject", {
+      method: "POST",
+      headers: {
+        "Content-Type":"application/json",
+        "x-dzs-client-id": clientId || "",
+        "x-dzs-match-id": matchId,
+      },
+      body: JSON.stringify({ filename, text, matchId, clientId }),
+    });
+    const data = await res.json();
+    if(!data?.ok){
+      studioLog(`Inject failed: ${data?.error || res.status}`);
+      return;
+    }
+    const scriptId = data.scriptId;
+    engine?.ctx?.dzsStudio?.installDzs?.({ filename, text, ownerId: clientId, scriptId });
+    studioLog(`Injected: ${scriptId}`);
+    await refreshInstalled();
+  }
+
+  async function disableScript(scriptId, skipQueue=false){
+    if(!isHost()){
+      studioLog("Disable blocked: host-only.");
+      return;
+    }
+    if(!isLobby()){
+      if(!skipQueue){
+        queueAction({ type:"disable", scriptId });
+      } else {
+        studioLog("Disable blocked: lobby-only.");
+      }
+      return;
+    }
+    const matchId = getMatchId() || "global";
+    const clientId = getClientId();
+    const res = await fetch("/api/dzs/disable", {
+      method: "POST",
+      headers: {
+        "Content-Type":"application/json",
+        "x-dzs-client-id": clientId || "",
+        "x-dzs-match-id": matchId,
+      },
+      body: JSON.stringify({ scriptId, matchId, clientId }),
+    });
+    const data = await res.json();
+    if(!data?.ok){
+      studioLog(`Disable failed: ${data?.error || res.status}`);
+      return;
+    }
+    engine?.ctx?.dzsStudio?.disable?.(scriptId);
+    studioLog(`Disabled: ${scriptId}`);
+    await refreshInstalled();
+  }
+
+  async function unloadScript(scriptId, skipQueue=false){
+    if(!isHost()){
+      studioLog("Unload blocked: host-only.");
+      return;
+    }
+    if(!isLobby()){
+      if(!skipQueue){
+        queueAction({ type:"unload", scriptId });
+      } else {
+        studioLog("Unload blocked: lobby-only.");
+      }
+      return;
+    }
+    const matchId = getMatchId() || "global";
+    const clientId = getClientId();
+    const res = await fetch("/api/dzs/unload", {
+      method: "POST",
+      headers: {
+        "Content-Type":"application/json",
+        "x-dzs-client-id": clientId || "",
+        "x-dzs-match-id": matchId,
+      },
+      body: JSON.stringify({ scriptId, matchId, clientId }),
+    });
+    const data = await res.json();
+    if(!data?.ok){
+      studioLog(`Unload failed: ${data?.error || res.status}`);
+      return;
+    }
+    engine?.ctx?.dzsStudio?.remove?.(scriptId);
+    studioLog(`Unloaded: ${scriptId}`);
+    await refreshInstalled();
+  }
 
   // --- section renderers ---
   function renderWeapons(){
@@ -360,9 +778,39 @@ export function DzsDevScreen({ engine, onClose }){
     syn.style.overflow="auto";
     syn.style.fontFamily="var(--ui-mono)";
     syn.style.fontSize="12px";
-    syn.textContent = `on <eventName> {\n  <builtin> arg1 arg2 ...\n  <builtin> ...\n}\n\n// Example\non zm:build {\n  addFloor 60\n  addWalls 60 4\n  setPlayerSpawn 0 10\n}`;
+    syn.textContent = `on <eventName> {\n  <builtin> arg1 arg2 ...\n  self thread myLoop()\n  level thread controller()\n  wait 0.5\n  waittill "signal"\n  endon "signal"\n  notify "signal" arg1\n}\n\nmyLoop(){\n  // ...\n}\n\n// Example\non zm:build {\n  addFloor 60\n  addWalls 60 4\n  setPlayerSpawn 0 10\n}`;
     syntax.appendChild(syn);
     scroll.appendChild(syntax);
+
+    const template = mkCard();
+    template.appendChild(sectionTitle("GSC Template"));
+    const tHint = document.createElement("div");
+    tHint.className = "dz-help";
+    tHint.textContent = "Use this as a starting point for custom modes.";
+    const tPre = document.createElement("pre");
+    tPre.style.margin="10px 0 0 0";
+    tPre.style.padding="10px";
+    tPre.style.borderRadius="12px";
+    tPre.style.background="rgba(0,0,0,0.35)";
+    tPre.style.border="1px solid rgba(255,255,255,0.08)";
+    tPre.style.overflow="auto";
+    tPre.style.fontFamily="var(--ui-mono)";
+    tPre.style.fontSize="12px";
+    tPre.textContent = GSC_SAMPLE_TEXT;
+    const tActions = document.createElement("div");
+    tActions.className = "dz-row";
+    tActions.style.marginTop = "10px";
+    const dl = Button({ text:"Download .dzs", variant:"secondary", onClick: ()=>{
+      const a = document.createElement("a");
+      a.href = GSC_SAMPLE_PATH;
+      a.download = "gsc_sample.dzs";
+      a.click();
+    }});
+    tActions.appendChild(dl);
+    template.appendChild(tHint);
+    template.appendChild(tPre);
+    template.appendChild(tActions);
+    scroll.appendChild(template);
 
     const docsArr = engine?.ctx?.scripts?.dzs?.builtinDocs || [];
     const q = (search.value || "").toLowerCase().trim();
@@ -478,9 +926,354 @@ export function DzsDevScreen({ engine, onClose }){
     scroll.appendChild(docsWrap);
   }
 
+  function renderStudioLibrary(){
+    const list = studioRefs.libraryList;
+    if(!list) return;
+    list.innerHTML = "";
+    const q = (studioRefs.searchInput?.value || "").toLowerCase().trim();
+    const items = studioState.library.filter((s)=>{
+      const hay = `${s.name} ${s.desc} ${(s.tags||[]).join(" ")} ${s.filename}`.toLowerCase();
+      return !q || hay.includes(q);
+    });
+    if(items.length === 0){
+      const none = document.createElement("div");
+      none.className = "dz-help";
+      none.textContent = "No scripts found.";
+      list.appendChild(none);
+      return;
+    }
+    for(const s of items){
+      const row = mkCard();
+      row.style.padding = "8px 10px";
+      row.style.cursor = "pointer";
+      row.style.background = "rgba(0,0,0,0.3)";
+      const name = document.createElement("div");
+      name.style.fontWeight = "900";
+      name.textContent = s.name || s.filename;
+      const meta = document.createElement("div");
+      meta.className = "dz-help";
+      const tags = Array.isArray(s.tags) && s.tags.length ? ` | ${s.tags.join(", ")}` : "";
+      const version = s.version ? `v${s.version}` : "v?";
+      meta.textContent = `${version}${tags}`;
+      const desc = document.createElement("div");
+      desc.className = "dz-help";
+      desc.style.opacity = "0.8";
+      desc.textContent = s.desc || s.filename;
+      row.appendChild(name);
+      row.appendChild(meta);
+      row.appendChild(desc);
+      row.addEventListener("click", async ()=>{
+        try{
+          const res = await fetch(`/api/dzs/library/read?filename=${encodeURIComponent(s.filename)}`);
+          const data = await res.json();
+          if(!data?.ok){
+            studioLog(`Read failed: ${data?.error || res.status}`);
+            return;
+          }
+          setEditorText(data.text || "", s.filename || "library.dzs");
+          studioLog(`Loaded: ${s.filename}`);
+        } catch (err){
+          studioLog(`Read failed: ${err?.message || err}`);
+        }
+      });
+      list.appendChild(row);
+    }
+  }
+
+  function renderStudioInstalled(){
+    const list = studioRefs.installedList;
+    if(!list) return;
+    list.innerHTML = "";
+    if(!studioState.installed.length){
+      const none = document.createElement("div");
+      none.className = "dz-help";
+      none.textContent = "No scripts installed.";
+      list.appendChild(none);
+      return;
+    }
+    for(const s of studioState.installed){
+      const row = mkCard();
+      row.style.padding = "8px 10px";
+      row.style.display = "grid";
+      row.style.gridTemplateColumns = "70px 1fr auto";
+      row.style.gap = "10px";
+      row.style.alignItems = "center";
+      row.style.background = "rgba(0,0,0,0.3)";
+
+      const badge = document.createElement("div");
+      badge.style.padding = "4px 6px";
+      badge.style.borderRadius = "8px";
+      badge.style.textAlign = "center";
+      badge.style.fontSize = "11px";
+      badge.style.fontWeight = "900";
+      badge.style.background = s.enabled ? "rgba(80,200,120,0.2)" : "rgba(255,160,120,0.2)";
+      badge.style.border = `1px solid ${s.enabled ? "rgba(80,200,120,0.5)" : "rgba(255,160,120,0.5)"}`;
+      badge.textContent = s.enabled ? "ENABLED" : "DISABLED";
+
+      const info = document.createElement("div");
+      const name = document.createElement("div");
+      name.style.fontWeight = "900";
+      name.textContent = s.name || s.filename;
+      const meta = document.createElement("div");
+      meta.className = "dz-help";
+      meta.textContent = `${s.filename || "dzs"} | ${s.scriptId || ""}`;
+      info.appendChild(name);
+      info.appendChild(meta);
+
+      const actions = document.createElement("div");
+      actions.className = "dz-row";
+      const disableBtn = Button({ text:"Disable", variant:"secondary", onClick: ()=>disableScript(s.scriptId) });
+      const unloadBtn = Button({ text:"Unload", variant:"secondary", onClick: ()=>unloadScript(s.scriptId) });
+      disableBtn.disabled = !isHost();
+      unloadBtn.disabled = !isHost();
+      actions.appendChild(disableBtn);
+      actions.appendChild(unloadBtn);
+
+      row.appendChild(badge);
+      row.appendChild(info);
+      row.appendChild(actions);
+      list.appendChild(row);
+    }
+  }
+
+  function renderStudio(){
+    rightTitle.textContent = "SCRIPT STUDIO";
+    rightHint.textContent = "Live DZS mods in the pre-game lobby (host only).";
+    scroll.innerHTML = "";
+    scroll.style.overflow = "hidden";
+
+    const studioWrap = document.createElement("div");
+    studioWrap.style.display = "grid";
+    studioWrap.style.gridTemplateRows = "1fr 180px";
+    studioWrap.style.gap = "10px";
+    studioWrap.style.height = "100%";
+    studioWrap.style.minHeight = "0";
+
+    const main = document.createElement("div");
+    main.style.display = "grid";
+    main.style.gridTemplateColumns = "280px 1fr 320px";
+    main.style.gap = "10px";
+    main.style.minHeight = "0";
+
+    const libraryCard = mkCard();
+    libraryCard.style.display = "flex";
+    libraryCard.style.flexDirection = "column";
+    libraryCard.style.gap = "8px";
+    libraryCard.style.minHeight = "0";
+    libraryCard.appendChild(sectionTitle("Library"));
+
+    const libSearch = document.createElement("input");
+    libSearch.className = "dz-input";
+    libSearch.placeholder = "Search scripts";
+    libSearch.addEventListener("input", renderStudioLibrary);
+    studioRefs.searchInput = libSearch;
+
+    const libList = document.createElement("div");
+    libList.style.flex = "1";
+    libList.style.minHeight = "0";
+    libList.style.overflow = "auto";
+    libList.style.display = "flex";
+    libList.style.flexDirection = "column";
+    libList.style.gap = "8px";
+    studioRefs.libraryList = libList;
+
+    libraryCard.appendChild(libSearch);
+    libraryCard.appendChild(libList);
+
+    const editorCard = mkCard();
+    editorCard.style.display = "flex";
+    editorCard.style.flexDirection = "column";
+    editorCard.style.gap = "8px";
+    editorCard.style.minHeight = "0";
+    editorCard.appendChild(sectionTitle("Editor"));
+
+    const editorTop = document.createElement("div");
+    editorTop.className = "dz-row";
+    editorTop.style.alignItems = "center";
+
+    const fileLabel = document.createElement("div");
+    fileLabel.style.fontFamily = "var(--ui-mono)";
+    fileLabel.style.fontSize = "12px";
+    fileLabel.style.opacity = "0.9";
+    fileLabel.textContent = studioState.current.filename;
+    studioRefs.fileLabel = fileLabel;
+
+    const btnRow = document.createElement("div");
+    btnRow.className = "dz-row";
+
+    const validateBtn = Button({ text:"Validate", variant:"secondary", onClick: async ()=>{ await validateCurrent(); } });
+    const injectBtn = Button({ text:"Inject/Enable", variant:"primary", onClick: async ()=>{
+      const ok = await validateCurrent();
+      if(!ok) return;
+      const text = getEditorText();
+      const filename = studioState.current.filename || "studio.dzs";
+      await injectScript({ filename, text });
+    }});
+    injectBtn.disabled = !isHost();
+    const downloadBtn = Button({ text:"Download .dzs", variant:"secondary", onClick: ()=>{
+      const text = getEditorText();
+      const blob = new Blob([text], { type:"text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = studioState.current.filename || "script.dzs";
+      a.click();
+      setTimeout(()=> URL.revokeObjectURL(a.href), 0);
+    }});
+    const importBtn = Button({ text:"Import .dzs", variant:"secondary", onClick: ()=>fileInput.click() });
+
+    btnRow.appendChild(validateBtn);
+    btnRow.appendChild(injectBtn);
+    btnRow.appendChild(downloadBtn);
+    btnRow.appendChild(importBtn);
+
+    const statusLine = document.createElement("div");
+    statusLine.className = "dz-help";
+    studioRefs.statusLine = statusLine;
+
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = ".dzs";
+    fileInput.style.display = "none";
+    fileInput.addEventListener("change", ()=>{
+      const file = fileInput.files?.[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        setEditorText(String(reader.result || ""), file.name || "imported.dzs");
+        studioLog(`Imported: ${file.name || "file"}`);
+      };
+      reader.readAsText(file);
+    });
+
+    editorTop.appendChild(fileLabel);
+    editorTop.appendChild(document.createElement("div")).className = "dz-spacer";
+    editorTop.appendChild(btnRow);
+
+    const editorHost = document.createElement("div");
+    editorHost.style.flex = "1";
+    editorHost.style.minHeight = "0";
+    editorHost.style.position = "relative";
+
+    const loading = document.createElement("div");
+    loading.className = "dz-help";
+    loading.style.position = "absolute";
+    loading.style.inset = "10px";
+    loading.style.display = "flex";
+    loading.style.alignItems = "center";
+    loading.style.justifyContent = "center";
+    loading.textContent = "Loading Monaco editor...";
+    editorHost.appendChild(loading);
+
+    if(!studioEditorEl){
+      studioEditorEl = document.createElement("div");
+      studioEditorEl.style.position = "absolute";
+      studioEditorEl.style.inset = "0";
+    }
+    editorHost.appendChild(studioEditorEl);
+
+    loadMonaco().then((monaco)=>{
+      registerDzsLanguage(monaco, engine?.ctx?.scripts?.dzs?.builtinDocs || []);
+      if(!studioModel){
+        studioModel = monaco.editor.createModel(studioState.current.text, MONACO_LANG);
+        studioModel.onDidChangeContent(()=>{
+          studioState.current.text = studioModel.getValue();
+        });
+      }
+      if(!studioEditor){
+        studioEditor = monaco.editor.create(studioEditorEl, {
+          model: studioModel,
+          theme: "vs-dark",
+          minimap: { enabled: false },
+          fontSize: 13,
+          wordWrap: "on",
+          automaticLayout: true,
+        });
+      } else {
+        studioEditor.layout();
+      }
+      loading.remove();
+    }).catch((err)=>{
+      loading.textContent = `Monaco load failed: ${err?.message || err}`;
+    });
+
+    editorCard.appendChild(editorTop);
+    editorCard.appendChild(statusLine);
+    editorCard.appendChild(editorHost);
+    editorCard.appendChild(fileInput);
+
+    const installedCard = mkCard();
+    installedCard.style.display = "flex";
+    installedCard.style.flexDirection = "column";
+    installedCard.style.gap = "8px";
+    installedCard.style.minHeight = "0";
+    installedCard.appendChild(sectionTitle("Installed"));
+
+    const installedList = document.createElement("div");
+    installedList.style.flex = "1";
+    installedList.style.minHeight = "0";
+    installedList.style.overflow = "auto";
+    installedList.style.display = "flex";
+    installedList.style.flexDirection = "column";
+    installedList.style.gap = "8px";
+    studioRefs.installedList = installedList;
+
+    installedCard.appendChild(installedList);
+
+    const bottom = mkCard();
+    bottom.style.display = "grid";
+    bottom.style.gridTemplateColumns = "1fr 1fr";
+    bottom.style.gap = "10px";
+    bottom.style.minHeight = "0";
+
+    const problemsWrap = document.createElement("div");
+    problemsWrap.style.display = "flex";
+    problemsWrap.style.flexDirection = "column";
+    problemsWrap.style.gap = "6px";
+    problemsWrap.appendChild(sectionTitle("Problems"));
+    const problemsList = document.createElement("div");
+    problemsList.style.flex = "1";
+    problemsList.style.minHeight = "0";
+    problemsList.style.overflow = "auto";
+    studioRefs.problemsList = problemsList;
+    problemsWrap.appendChild(problemsList);
+
+    const outputWrap = document.createElement("div");
+    outputWrap.style.display = "flex";
+    outputWrap.style.flexDirection = "column";
+    outputWrap.style.gap = "6px";
+    outputWrap.appendChild(sectionTitle("Output"));
+    const outputList = document.createElement("div");
+    outputList.style.flex = "1";
+    outputList.style.minHeight = "0";
+    outputList.style.overflow = "auto";
+    studioRefs.outputList = outputList;
+    outputWrap.appendChild(outputList);
+
+    bottom.appendChild(problemsWrap);
+    bottom.appendChild(outputWrap);
+
+    main.appendChild(libraryCard);
+    main.appendChild(editorCard);
+    main.appendChild(installedCard);
+
+    studioWrap.appendChild(main);
+    studioWrap.appendChild(bottom);
+
+    scroll.appendChild(studioWrap);
+
+    updateStudioStatus();
+    renderStudioProblems();
+    renderStudioOutput();
+    renderStudioLibrary();
+    renderStudioInstalled();
+    refreshLibrary();
+    refreshInstalled();
+  }
+
   function renderRight(){
     // Clear body and rebuild per section
     body.innerHTML = "";
+    scroll.style.overflow = "auto";
 
     if(active === "dzs"){
       body.appendChild(dzsControls);
@@ -492,11 +1285,16 @@ export function DzsDevScreen({ engine, onClose }){
     else if(active === "entities") renderEntities();
     else if(active === "clients") renderClients();
     else if(active === "servermaster") renderServerMaster();
+    else if(active === "studio") renderStudio();
     else renderDzs();
   }
 
   search.addEventListener("input", ()=>{ if(active === "dzs") renderRight(); });
   engine?.events?.on?.("server:master", ()=>{ if(active === "servermaster") renderServerMaster(); });
+  engine?.events?.on?.("match:lobbyState", ()=>{ updateStudioStatus(); flushQueue(); });
+  engine?.events?.on?.("match:found", ()=>{ updateStudioStatus(); flushQueue(); });
+  engine?.events?.on?.("match:started", ()=>{ updateStudioStatus(); });
+  engine?.events?.on?.("match:ended", ()=>{ updateStudioStatus(); });
   renderRight();
 
   right.appendChild(rightHeader);

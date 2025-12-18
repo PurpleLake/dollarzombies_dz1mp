@@ -1,0 +1,27 @@
+# GSC-style sample script for custom modes.
+
+on onGameStart {
+  level.wave = 1
+  level thread modeController()
+}
+
+modeController(){
+  endon "game_end"
+  while(true){
+    wait 30
+    level.wave = (level.wave || 1) + 1
+    iPrintLnAll ^3Wave:^7 level.wave
+  }
+}
+
+on onPlayerSpawned {
+  self thread playerDeathLoop()
+}
+
+playerDeathLoop(){
+  endon "disconnect"
+  while(true){
+    waittill "death"
+    iPrintLnAll ^1Player died.
+  }
+}

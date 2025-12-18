@@ -6,6 +6,7 @@ import fs from "fs";
 import path from "path";
 import url from "url";
 import { MatchManager } from "./MatchManager.js";
+import { DzsRuntime } from "./engine/core/dzs/runtime/DzsRuntime.js";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
@@ -36,11 +37,293 @@ function safeJoin(root, reqPath) {
   return resolved;
 }
 
+const DZS_LIBRARY_DIRS = [
+  path.join(__dirname, "dzs_library"),
+  path.join(__dirname, "public", "dzs_samples"),
+];
+
+function readJsonBody(req){
+  return new Promise((resolve, reject)=>{
+    let raw = "";
+    req.on("data", (chunk)=>{ raw += chunk; });
+    req.on("end", ()=>{
+      if(!raw) return resolve({});
+      try { resolve(JSON.parse(raw)); } catch (err){ reject(err); }
+    });
+    req.on("error", reject);
+  });
+}
+
+function sendJson(res, code, obj){
+  const body = JSON.stringify(obj || {});
+  res.writeHead(code, { "Content-Type": "application/json; charset=utf-8" });
+  res.end(body);
+}
+
+function parseHeaderMeta(text, fallbackName){
+  const lines = String(text || "").split(/\r?\n/);
+  const meta = { name: fallbackName || "Unnamed Script", desc: "", version: "", tags: [] };
+  for(const line of lines){
+    const trimmed = line.trim();
+    if(!trimmed) continue;
+    if(!(trimmed.startsWith("//") || trimmed.startsWith("#"))) break;
+    const content = trimmed.replace(/^\/\//, "").replace(/^#/, "").trim();
+    if(!content.startsWith("@")) continue;
+    const m = content.match(/^@(\w+)\s+(.*)$/);
+    if(!m) continue;
+    const key = m[1].toLowerCase();
+    const val = m[2].trim();
+    if(key === "name") meta.name = val;
+    else if(key === "desc") meta.desc = val;
+    else if(key === "version") meta.version = val;
+    else if(key === "tags") meta.tags = val.split(/[,\s]+/).map(t=>t.trim()).filter(Boolean);
+  }
+  return meta;
+}
+
+function buildLibraryList(){
+  const out = [];
+  for(const dir of DZS_LIBRARY_DIRS){
+    if(!fs.existsSync(dir)) continue;
+    const items = fs.readdirSync(dir, { withFileTypes: true });
+    for(const item of items){
+      if(!item.isFile()) continue;
+      if(!item.name.toLowerCase().endsWith(".dzs")) continue;
+      const full = path.join(dir, item.name);
+      const rel = path.relative(__dirname, full).replace(/\\/g, "/");
+      let text = "";
+      try { text = fs.readFileSync(full, "utf8"); } catch {}
+      const meta = parseHeaderMeta(text, item.name.replace(/\.dzs$/i, ""));
+      out.push({
+        id: rel,
+        filename: rel,
+        name: meta.name,
+        desc: meta.desc,
+        version: meta.version,
+        tags: meta.tags,
+      });
+    }
+  }
+  out.sort((a, b)=> a.name.localeCompare(b.name));
+  return out;
+}
+
+function readLibraryFile(filename){
+  const clean = String(filename || "").replace(/\\/g, "/");
+  if(!clean) return null;
+  const full = safeJoin(__dirname, "/" + clean);
+  if(!full) return null;
+  for(const dir of DZS_LIBRARY_DIRS){
+    const base = path.resolve(dir);
+    if(full === base || full.startsWith(base + path.sep)){
+      if(fs.existsSync(full) && fs.statSync(full).isFile()) return full;
+    }
+  }
+  return null;
+}
+
+function parseValidationError(text, err){
+  const msg = String(err?.message || err || "Parse error");
+  const lineMatch = msg.match(/@line\s+(\d+)/i) || msg.match(/:(\d+)\s/);
+  const line = lineMatch ? Math.max(1, Number(lineMatch[1])) : 1;
+  const lines = String(text || "").split(/\r?\n/);
+  const snippet = lines[line - 1] || "";
+  return { line, col: 1, message: msg, snippet };
+}
+
+function validateDzs(text){
+  const runtime = new DzsRuntime({ events: { emit: ()=>{} }, ctx: { events: { emit: ()=>{} } } });
+  try{
+    runtime.loadText(String(text || ""), "(validate)", "validate");
+    return { ok: true, errors: [] };
+  } catch (err){
+    return { ok: false, errors: [parseValidationError(text, err)] };
+  }
+}
+
+const dzsScripts = new Map(); // scriptId -> record
+const dzsByMatch = new Map(); // matchId -> Set<scriptId>
+let dzsSeq = 1;
+
+function getMatchScripts(matchId){
+  const id = String(matchId || "global");
+  if(!dzsByMatch.has(id)) dzsByMatch.set(id, new Set());
+  return dzsByMatch.get(id);
+}
+
+function addScriptRecord(matchId, record){
+  dzsScripts.set(record.scriptId, record);
+  getMatchScripts(matchId).add(record.scriptId);
+}
+
+function removeScriptRecord(scriptId){
+  const rec = dzsScripts.get(scriptId);
+  if(!rec) return false;
+  dzsScripts.delete(scriptId);
+  const set = dzsByMatch.get(String(rec.matchId || "global"));
+  if(set) set.delete(scriptId);
+  return true;
+}
+
+function getReqClientId(req, body){
+  return body?.clientId || req.headers["x-dzs-client-id"] || req.headers["x-client-id"] || null;
+}
+
+function getReqMatchId(req, body, u){
+  return body?.matchId || req.headers["x-dzs-match-id"] || u?.searchParams?.get("matchId") || null;
+}
+
+function isHostForMatch(matchId, clientId){
+  if(!matchId || !clientId) return false;
+  const match = matchManager.getMatch(matchId);
+  if(!match) return false;
+  return String(match.hostPlayerId) === String(clientId);
+}
+
+function isMatchLobby(matchId){
+  if(!matchId) return false;
+  const match = matchManager.getMatch(matchId);
+  return match?.status === "lobby";
+}
+
 const server = http.createServer((req, res) => {
   try {
     const u = new URL(req.url, `http://${req.headers.host}`);
     let pathname = decodeURIComponent(u.pathname);
     if (pathname === "/") pathname = "/public/index.html";
+
+    if(pathname === "/api/dzs/library" && req.method === "GET"){
+      sendJson(res, 200, { ok: true, scripts: buildLibraryList() });
+      return;
+    }
+
+    if(pathname === "/api/dzs/library/read" && req.method === "GET"){
+      const filename = u.searchParams.get("filename") || "";
+      const full = readLibraryFile(filename);
+      if(!full){
+        sendJson(res, 404, { ok: false, error: "not_found" });
+        return;
+      }
+      const text = fs.readFileSync(full, "utf8");
+      sendJson(res, 200, { ok: true, filename, text });
+      return;
+    }
+
+    if(pathname === "/api/dzs/validate" && req.method === "POST"){
+      readJsonBody(req).then((body)=>{
+        const result = validateDzs(body?.text || "");
+        sendJson(res, 200, result);
+      }).catch((err)=>{
+        sendJson(res, 400, { ok: false, error: "bad_json", detail: String(err?.message || err) });
+      });
+      return;
+    }
+
+    if(pathname === "/api/dzs/installed" && req.method === "GET"){
+      const matchId = getReqMatchId(req, null, u) || "global";
+      const ids = getMatchScripts(matchId);
+      const list = Array.from(ids).map(id=>dzsScripts.get(id)).filter(Boolean).map(rec=>({
+        scriptId: rec.scriptId,
+        filename: rec.filename,
+        name: rec.name,
+        desc: rec.desc,
+        version: rec.version,
+        tags: rec.tags,
+        enabled: rec.enabled,
+        ownerId: rec.ownerId,
+        matchId: rec.matchId,
+      }));
+      sendJson(res, 200, { ok: true, scripts: list });
+      return;
+    }
+
+    if(pathname === "/api/dzs/inject" && req.method === "POST"){
+      readJsonBody(req).then((body)=>{
+        const matchId = getReqMatchId(req, body, u);
+        const clientId = getReqClientId(req, body);
+        if(!isHostForMatch(matchId, clientId)){
+          sendJson(res, 403, { ok: false, error: "not_host" });
+          return;
+        }
+        if(!isMatchLobby(matchId)){
+          sendJson(res, 409, { ok: false, error: "not_in_lobby" });
+          return;
+        }
+        const filename = String(body?.filename || "(dzs)");
+        const text = String(body?.text || "");
+        const meta = parseHeaderMeta(text, filename.replace(/\.dzs$/i, ""));
+        const scriptId = `dzs_${dzsSeq++}`;
+        const record = {
+          scriptId,
+          matchId: String(matchId || "global"),
+          filename,
+          name: meta.name,
+          desc: meta.desc,
+          version: meta.version,
+          tags: meta.tags,
+          enabled: true,
+          ownerId: clientId ? String(clientId) : null,
+          installedAt: Date.now(),
+        };
+        addScriptRecord(matchId, record);
+        sendJson(res, 200, { ok: true, scriptId });
+      }).catch((err)=>{
+        sendJson(res, 400, { ok: false, error: "bad_json", detail: String(err?.message || err) });
+      });
+      return;
+    }
+
+    if(pathname === "/api/dzs/disable" && req.method === "POST"){
+      readJsonBody(req).then((body)=>{
+        const scriptId = String(body?.scriptId || "");
+        const rec = dzsScripts.get(scriptId);
+        if(!rec){
+          sendJson(res, 404, { ok: false, error: "not_found" });
+          return;
+        }
+        const matchId = rec.matchId;
+        const clientId = getReqClientId(req, body);
+        if(!isHostForMatch(matchId, clientId)){
+          sendJson(res, 403, { ok: false, error: "not_host" });
+          return;
+        }
+        if(!isMatchLobby(matchId)){
+          sendJson(res, 409, { ok: false, error: "not_in_lobby" });
+          return;
+        }
+        rec.enabled = false;
+        sendJson(res, 200, { ok: true });
+      }).catch((err)=>{
+        sendJson(res, 400, { ok: false, error: "bad_json", detail: String(err?.message || err) });
+      });
+      return;
+    }
+
+    if(pathname === "/api/dzs/unload" && req.method === "POST"){
+      readJsonBody(req).then((body)=>{
+        const scriptId = String(body?.scriptId || "");
+        const rec = dzsScripts.get(scriptId);
+        if(!rec){
+          sendJson(res, 404, { ok: false, error: "not_found" });
+          return;
+        }
+        const matchId = rec.matchId;
+        const clientId = getReqClientId(req, body);
+        if(!isHostForMatch(matchId, clientId)){
+          sendJson(res, 403, { ok: false, error: "not_host" });
+          return;
+        }
+        if(!isMatchLobby(matchId)){
+          sendJson(res, 409, { ok: false, error: "not_in_lobby" });
+          return;
+        }
+        removeScriptRecord(scriptId);
+        sendJson(res, 200, { ok: true });
+      }).catch((err)=>{
+        sendJson(res, 400, { ok: false, error: "bad_json", detail: String(err?.message || err) });
+      });
+      return;
+    }
 
     const filePath = safeJoin(__dirname, pathname);
     if (!filePath) {

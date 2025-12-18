@@ -2,6 +2,7 @@ import { Engine } from "/engine/core/scripts/Engine.js";
 import { ECS } from "/engine/core/scripts/ECS.js";
 import { Log } from "/engine/core/utilities/Log.js";
 import { ScriptLoader } from "/engine/core/scripts/ScriptLoader.js";
+import { DzsScriptManager } from "/engine/core/dzs/runtime/DzsScriptManager.js";
 import { ZmGame } from "/engine/game/zm/scripts/ZmGame.js";
 import { MpGame } from "/engine/game/mp/scripts/MpGame.js";
 import { NetClient } from "/engine/core/scripts/net/NetClient.js";
@@ -137,6 +138,7 @@ engine.events.on("weapon:reloadEnd", ({ clip, reserve }) => {
 
 // Scripts + game
 const scripts = new ScriptLoader({ engine });
+engine.ctx.dzsStudio = new DzsScriptManager({ runtime: scripts.dzs, events: engine.events });
 let game = null;
 
 const initialMode = options.get("gameMode") || "zm";

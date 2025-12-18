@@ -1,0 +1,20 @@
+// @name Double Points
+// @desc Doubles zombie kill cash during waves.
+// @version 1.0.0
+// @tags zombies, economy, waves
+
+on zm:waveStart {
+  level.doublePoints = 1
+  iPrintLnBoldAll ^2Double Points ACTIVE
+}
+
+on zm:waveEnd {
+  level.doublePoints = 0
+  iPrintLnBoldAll ^1Double Points ENDED
+}
+
+on zm:zombieDeath {
+  if(level.doublePoints){
+    cashAdd event.player 50
+  }
+}

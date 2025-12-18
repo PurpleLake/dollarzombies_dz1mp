@@ -14,8 +14,10 @@ export class ScriptLoader {
     // Route engine events to DZS handlers
     const route = (evt, handlers=[])=>{
       const off = this.engine.events.on(evt, (payload)=>{
-        this.dzs.run(evt, payload);
-        for(const h of handlers) this.dzs.run(h, payload);
+        const owner = this.dzs.resolveOwner(payload);
+        const matchId = this.engine?.ctx?.matchSession?.matchId ?? null;
+        this.dzs.run(evt, payload, { owner, matchId });
+        for(const h of handlers) this.dzs.run(h, payload, { owner, matchId });
       });
       this._unsubs.push(off);
     };
@@ -51,6 +53,71 @@ export class ScriptLoader {
     for (const [evt, handlers] of zmRoutes) route(evt, handlers);
     for (const [evt, handlers] of mpRoutes) route(evt, handlers);
 
+    // Script tick (timers)
+    const offTick = this.engine.events.on("engine:tick", ({ dt, t })=>{
+      this.dzs.tick(dt, (t ?? 0) * 1000);
+    });
+    this._unsubs.push(offTick);
+
+    // GSC-style notify bridge
+    const notifyLevel = (signal, ...args)=> this.dzs.notifyLevel(signal, ...args);
+    const notifyEntity = (entityId, signal, ...args)=> this.dzs.notifyEntity(entityId, signal, ...args);
+
+    const offWaveStart = this.engine.events.on("zm:waveStart", (payload)=>{
+      notifyLevel("round_start", payload?.wave ?? null, payload);
+    });
+    const offWaveEnd = this.engine.events.on("zm:waveEnd", (payload)=>{
+      notifyLevel("round_end", payload?.wave ?? null, payload);
+    });
+    const offZmStart = this.engine.events.on("zm:start", (payload)=>{
+      notifyLevel("game_start", payload);
+    });
+    const offMpStart = this.engine.events.on("mp:start", (payload)=>{
+      notifyLevel("game_start", payload);
+    });
+    const offZmEnd = this.engine.events.on("zm:gameEnd", (payload)=>{
+      notifyLevel("game_end", payload);
+      const matchId = this.engine?.ctx?.matchSession?.matchId ?? null;
+      setTimeout(()=> this.dzs.resetBetweenGames(matchId), 0);
+    });
+    const offMpEnd = this.engine.events.on("mp:gameEnd", (payload)=>{
+      notifyLevel("game_end", payload);
+      const matchId = this.engine?.ctx?.matchSession?.matchId ?? null;
+      setTimeout(()=> this.dzs.resetBetweenGames(matchId), 0);
+    });
+    const offMatchEnd = this.engine.events.on("match:ended", ({ matchId })=>{
+      this.dzs.resetBetweenGames(matchId);
+    });
+    const offZmDeath = this.engine.events.on("zm:playerDeath", (payload)=>{
+      const pid = this.dzs._pid(payload?.player);
+      notifyEntity(pid, "death", payload);
+    });
+    const offMpDeath = this.engine.events.on("mp:playerDeath", (payload)=>{
+      const pid = payload?.playerId != null ? String(payload.playerId) : this.dzs._pid(payload?.player);
+      notifyEntity(pid, "death", payload);
+    });
+    const offDisconnect = this.engine.events.on("net:playerDisconnect", ({ playerId })=>{
+      const pid = String(playerId ?? "");
+      if(!pid) return;
+      notifyEntity(pid, "disconnect", { playerId: pid });
+      const matchId = this.engine?.ctx?.matchSession?.matchId ?? null;
+      this.dzs.cancelOwnerThreads(matchId, "entity", pid, "disconnect");
+      this.dzs.clearEntityVars(matchId, pid);
+    });
+
+    this._unsubs.push(
+      offWaveStart,
+      offWaveEnd,
+      offZmStart,
+      offMpStart,
+      offZmEnd,
+      offMpEnd,
+      offMatchEnd,
+      offZmDeath,
+      offMpDeath,
+      offDisconnect,
+    );
+
   }
 
   async loadManifest(url){
@@ -76,7 +143,7 @@ export class ScriptLoader {
   }
 
   async loadAll(){
-    this.dzs.clear();
+    this.dzs.unloadAll?.();
     this.jsModules.length = 0;
 
     for(const f of this.files){
@@ -86,7 +153,7 @@ export class ScriptLoader {
         const res = await fetch(fileUrl, { cache:"no-store" });
         if(!res.ok) throw new Error(`DZS load failed: ${res.status} ${f}`);
         const text = await res.text();
-        this.dzs.loadText(text, f);
+        this.dzs.loadText(text, f, f);
         this.engine.events.emit("log", { msg: `[scripts] loaded dzs: ${f}` });
       } else if (f.endsWith(".js")) {
         let mod;

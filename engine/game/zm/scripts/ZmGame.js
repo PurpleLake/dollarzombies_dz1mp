@@ -78,6 +78,7 @@ export class ZmGame {
     this.engine.events.emit("zm:preload", {});
     this.engine.events.emit("zm:build", {});
     this.engine.events.emit("zm:start", {});
+    this.engine.events.emit("zm:playerSpawn", { player: this.players });
 
 // Game end bridge
 const offEnd = this.engine.events.on("zm:playerDeath", (e)=>{

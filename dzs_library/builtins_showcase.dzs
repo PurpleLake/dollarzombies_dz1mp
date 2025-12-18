@@ -1,0 +1,26 @@
+// @name Builtins Showcase
+// @desc Sample usage of common builtins, threads, and signals.
+// @version 1.0.0
+// @tags reference, builtins, tutorial
+
+on onGameStart {
+  level thread welcomeLoop()
+}
+
+welcomeLoop(){
+  endon "game_end"
+  iPrintLnBoldAll ^6Welcome to the builtins showcase
+  wait 2
+  log Builtins running
+}
+
+on onPlayerSpawned {
+  self thread starterHud()
+}
+
+starterHud(){
+  endon "disconnect"
+  id = createHudText(self, #ffffff, 20, 60, Spawned!, "")
+  wait 3
+  removeHud(id)
+}

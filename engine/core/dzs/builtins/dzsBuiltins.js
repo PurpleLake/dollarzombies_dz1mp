@@ -4,10 +4,20 @@ import { clamp } from "../../utilities/Math.js";
 export const BUILTIN_DOCS = Object.freeze([
   { name:"log", sig:"log(...words)", desc:"Prints a line to the in-game log.", example:"log Hello from DZS" },
 
+  // Context
+  { name:"self", sig:"self.<var>", desc:"Entity-scoped vars for the current thread.", example:"self.score = 10" },
+  { name:"level", sig:"level.<var>", desc:"Match-scoped vars shared across scripts.", example:"level.wave = 1" },
+
+  // Signals
+  { name:"notify", sig:"notify(signal, ...args)", desc:"Send a signal (defaults to self if available, else level).", example:"notify \"round_start\" 1" },
+  { name:"waittill", sig:"waittill(signal)", desc:"Wait for a signal and resume (returns args array).", example:"waittill \"death\"" },
+  { name:"endon", sig:"endon(signal)", desc:"End this thread when the signal fires.", example:"endon \"disconnect\"" },
+
   // Notifications
   { name:"iPrintLn", sig:"iPrintLn(player, text)", desc:"Small notification (bottom-right).", example:"iPrintLn(player, ^2Purchased!)" },
   { name:"iPrintLnBold", sig:"iPrintLnBold(player, text)", desc:"Bold notification (center).", example:"iPrintLnBold(player, ^1WARNING!)" },
   { name:"iPrintLnAll", sig:"iPrintLnAll(text)", desc:"Notify all players.", example:"iPrintLnAll(^3Round start)" },
+  { name:"iPrintLnBoldAll", sig:"iPrintLnBoldAll(text)", desc:"Bold notify all players.", example:"iPrintLnBoldAll(^1WARNING!)" },
 
   // HUD
   { name:"createHudItem", sig:"createHudItem(player, color, w, h, x, y, text, shader)", desc:"Creates a HUD panel item.", example:"id = createHudItem(player, #ffffff, 220, 40, 20, 20, Hello, )" },
@@ -35,20 +45,26 @@ export const BUILTIN_DOCS = Object.freeze([
   { name:"attachEntity", sig:"attachEntity(child, parent, offset)", desc:"Attach an entity to another.", example:"attachEntity(child, parent, {x:0,y:1,z:0})" },
   { name:"raycast", sig:"raycast(origin, dir, maxDist)", desc:"Raycast against script entities.", example:"hit = raycast(player, {x:0,y:0,z:-1}, 20)" },
 
-  // Timers & Vars
+  // Timers & Threads
   { name:"setTimeout", sig:"setTimeout(handlerName, ms)", desc:"Run a handler after delay.", example:"setTimeout(hostHud, 1000)" },
   { name:"setInterval", sig:"setInterval(handlerName, ms)", desc:"Run a handler repeatedly.", example:"setInterval(hostHud, 250)" },
+  { name:"clearTimer", sig:"clearTimer(timerId)", desc:"Cancel a timer or interval.", example:"clearTimer(tid)" },
+  { name:"wait", sig:"wait(seconds)", desc:"Pause the current handler without freezing the game (cooperative).", example:"wait 0.5" },
+  { name:"thread", sig:"thread handlerName(...args)", desc:"Start a handler in the background (cooperative thread).", example:"thread hudLoop()" },
+  { name:"self thread", sig:"self thread handlerName(...args)", desc:"Start a background handler on self.", example:"self thread perksLoop()" },
+  { name:"level thread", sig:"level thread handlerName(...args)", desc:"Start a background handler on level.", example:"level thread modeController()" },
+  { name:"startThread", sig:"startThread(handlerName, payload)", desc:"Start a background handler. Returns threadId.", example:"tid = startThread(\"hostHud\")" },
+  { name:"stopThread", sig:"stopThread(threadId)", desc:"Stop a background thread (best-effort).", example:"stopThread(tid)" },
+  { name:"getAllThreads", sig:"getAllThreads()", desc:"List active script threads.", example:"threads = getAllThreads()" },
+  { name:"threadEnd", sig:"threadEnd()", desc:"End the current thread immediately.", example:"threadEnd()" },
+
+  // Vars
   { name:"setVar", sig:"setVar(key, val)", desc:"Set a global script variable.", example:"setVar(powerOn, 1)" },
   { name:"getVar", sig:"getVar(key)", desc:"Get a global script variable.", example:"v = getVar(powerOn)" },
 
   // Audio
   { name:"playSound", sig:"playSound(player, soundId)", desc:"Play a sound (client-side).", example:"playSound(player, buy)" },
   { name:"playSoundAll", sig:"playSoundAll(soundId)", desc:"Play a sound for everyone (client-side).", example:"playSoundAll(round_start)" },
-  { name:"wait", sig:"wait(ms)", desc:"Pause the current handler without freezing the game (cooperative).", example:"wait 500" },
-  { name:"thread", sig:"thread handlerName", desc:"Start a handler in the background (cooperative thread).", example:"thread hostHud" },
-  { name:"startThread", sig:"startThread(handlerName, payload)", desc:"Start a background handler. Returns threadId.", example:"tid = startThread(\"hostHud\")" },
-  { name:"stopThread", sig:"stopThread(threadId)", desc:"Stop a background thread (best-effort).", example:"stopThread(tid)" },
-  { name:"getAllThreads", sig:"getAllThreads()", desc:"List active script threads.", example:"threads = getAllThreads()" },
 ]);
 
 function _clampText(s, max=300){
@@ -86,6 +102,12 @@ function _normalizePlayer(p, ctx){
   return String(p);
 }
 
+function _serverOnly(dzs, ctx, name, fn){
+  if(!dzs || dzs.isServer?.()) return fn();
+  dzs?._logServerOnly?.(name);
+  return null;
+}
+
 // Notifications helpers (DZS-visible)
 export function iPrintLn(player, text, ctx){
   ctx.notifications?.notify?.(player, String(text));
@@ -118,9 +140,9 @@ export function makeBuiltins(ctx){
 
     // Cash
     getCash: (player)=> ctx.cash?.get?.(_normalizePlayer(player, ctx)) ?? 0,
-    setCash: (player, amount)=> ctx.cash?.set?.(_normalizePlayer(player, ctx), amount),
-    cashAdd: (player, amount)=> ctx.cash?.add?.(_normalizePlayer(player, ctx), amount),
-    cashSub: (player, amount)=> ctx.cash?.sub?.(_normalizePlayer(player, ctx), amount),
+    setCash: (player, amount)=> _serverOnly(dzs, ctx, "setCash", ()=> ctx.cash?.set?.(_normalizePlayer(player, ctx), amount)),
+    cashAdd: (player, amount)=> _serverOnly(dzs, ctx, "cashAdd", ()=> ctx.cash?.add?.(_normalizePlayer(player, ctx), amount)),
+    cashSub: (player, amount)=> _serverOnly(dzs, ctx, "cashSub", ()=> ctx.cash?.sub?.(_normalizePlayer(player, ctx), amount)),
 
     // Notifications
     iPrintLn: (player, text)=> ctx.notifications?.notify?.(player, String(text)),
@@ -202,42 +224,41 @@ export function makeBuiltins(ctx){
     setEntityVar: (ent, key, val)=>{
       if(!dzs) return;
       const eid = dzs._eid(ent);
-      if(!dzs._entityVars.has(eid)) dzs._entityVars.set(eid, new Map());
-      dzs._entityVars.get(eid).set(String(key), val);
+      dzs._getEntityVars?.(null, eid)?.set(String(key), val);
     },
     getEntityVar: (ent, key)=>{
       if(!dzs) return null;
       const eid = dzs._eid(ent);
-      return dzs._entityVars.get(eid)?.get(String(key)) ?? null;
+      return dzs._getEntityVars?.(null, eid)?.get(String(key)) ?? null;
     },
 
     // Triggers
     createTrigger: (origin, radius=2, prompt="")=>{
       const o = _resolvePos(origin) || origin;
-      return triggers?.create?.(o, _safeNum(radius, 2, 0.25, 50), { prompt: _clampText(prompt, 220) }) ?? null;
+      return _serverOnly(dzs, ctx, "createTrigger", ()=> triggers?.create?.(o, _safeNum(radius, 2, 0.25, 50), { prompt: _clampText(prompt, 220) }) ?? null);
     },
-    destroyTrigger: (id)=> triggers?.destroy?.(id),
-    setTriggerPrompt: (id, text)=> triggers?.setPrompt?.(id, _clampText(text, 220)),
-    onTriggerUse: (id, handlerName)=> triggers?.setHandler?.(id, "use", handlerName),
-    onTriggerEnter: (id, handlerName)=> triggers?.setHandler?.(id, "enter", handlerName),
-    onTriggerExit: (id, handlerName)=> triggers?.setHandler?.(id, "exit", handlerName),
-    setTriggerRadius: (id, r)=> triggers?.setRadius?.(id, _safeNum(r, 2, 0.25, 50)),
-    setTriggerEnabled: (id, enabled)=> triggers?.setEnabled?.(id, !!enabled),
-    setTriggerCooldown: (id, ms)=> triggers?.setCooldown?.(id, _safeNum(ms, 0, 0, 600000)),
-    setTriggerHoldTime: (id, ms)=> triggers?.setHoldTime?.(id, _safeNum(ms, 0, 0, 20000)),
+    destroyTrigger: (id)=> _serverOnly(dzs, ctx, "destroyTrigger", ()=> triggers?.destroy?.(id)),
+    setTriggerPrompt: (id, text)=> _serverOnly(dzs, ctx, "setTriggerPrompt", ()=> triggers?.setPrompt?.(id, _clampText(text, 220))),
+    onTriggerUse: (id, handlerName)=> _serverOnly(dzs, ctx, "onTriggerUse", ()=> triggers?.setHandler?.(id, "use", handlerName)),
+    onTriggerEnter: (id, handlerName)=> _serverOnly(dzs, ctx, "onTriggerEnter", ()=> triggers?.setHandler?.(id, "enter", handlerName)),
+    onTriggerExit: (id, handlerName)=> _serverOnly(dzs, ctx, "onTriggerExit", ()=> triggers?.setHandler?.(id, "exit", handlerName)),
+    setTriggerRadius: (id, r)=> _serverOnly(dzs, ctx, "setTriggerRadius", ()=> triggers?.setRadius?.(id, _safeNum(r, 2, 0.25, 50))),
+    setTriggerEnabled: (id, enabled)=> _serverOnly(dzs, ctx, "setTriggerEnabled", ()=> triggers?.setEnabled?.(id, !!enabled)),
+    setTriggerCooldown: (id, ms)=> _serverOnly(dzs, ctx, "setTriggerCooldown", ()=> triggers?.setCooldown?.(id, _safeNum(ms, 0, 0, 600000))),
+    setTriggerHoldTime: (id, ms)=> _serverOnly(dzs, ctx, "setTriggerHoldTime", ()=> triggers?.setHoldTime?.(id, _safeNum(ms, 0, 0, 20000))),
     getTriggerHoldProgress: (id)=> triggers?.getHoldProgress?.(id) || 0,
     getAllTriggers: ()=> triggers?.getAll?.() || [],
 
     // Entities
     spawnEntity: async (type, origin, opts={})=>{
       const o = _resolvePos(origin) || origin;
-      return await entities?.spawnEntity?.(type, o, opts) ?? null;
+      return await _serverOnly(dzs, ctx, "spawnEntity", ()=> entities?.spawnEntity?.(type, o, opts) ?? null);
     },
     spawnModel: async (path, origin, opts={})=>{
       const o = _resolvePos(origin) || origin;
-      return await entities?.spawnEntity?.("model", o, { ...(opts||{}), model: String(path ?? "") }) ?? null;
+      return await _serverOnly(dzs, ctx, "spawnModel", ()=> entities?.spawnEntity?.("model", o, { ...(opts||{}), model: String(path ?? "") }) ?? null);
     },
-    deleteEntity: (ent)=> entities?.deleteEntity?.(ent),
+    deleteEntity: (ent)=> _serverOnly(dzs, ctx, "deleteEntity", ()=> entities?.deleteEntity?.(ent)),
     getAllEntities: ()=> entities?.getAll?.() || [],
     getEntityById: (id)=> entities?.getById?.(id) || null,
     getEntitiesByTag: (tag)=> entities?.getByTag?.(tag) || [],
@@ -246,15 +267,15 @@ export function makeBuiltins(ctx){
       return entities?.inRadius?.(o, _safeNum(r,0,0,5000)) || [];
     },
     getEntityPos: (ent)=> entities?.getPos?.(ent),
-    setEntityPos: (ent, pos)=> entities?.setPos?.(ent, pos),
+    setEntityPos: (ent, pos)=> _serverOnly(dzs, ctx, "setEntityPos", ()=> entities?.setPos?.(ent, pos)),
     getEntityAngles: (ent)=> entities?.getAngles?.(ent),
-    setEntityAngles: (ent, ang)=> entities?.setAngles?.(ent, ang),
-    setEntityHealth: (ent, hp)=> entities?.setHealth?.(ent, hp),
-    damageEntity: (ent, amt, source)=> entities?.damage?.(ent, amt, source||null),
-    setEntityTag: (ent, tag)=> entities?.setTag?.(ent, tag),
-    setEntityVisible: (ent, visible)=> entities?.setVisible?.(ent, !!visible),
-    setEntityScale: (ent, s)=> entities?.setScale?.(ent, _safeNum(s,1,0.01,500)),
-    attachEntity: (child, parent, offset)=> entities?.attach?.(child, parent, offset||{x:0,y:0,z:0}),
+    setEntityAngles: (ent, ang)=> _serverOnly(dzs, ctx, "setEntityAngles", ()=> entities?.setAngles?.(ent, ang)),
+    setEntityHealth: (ent, hp)=> _serverOnly(dzs, ctx, "setEntityHealth", ()=> entities?.setHealth?.(ent, hp)),
+    damageEntity: (ent, amt, source)=> _serverOnly(dzs, ctx, "damageEntity", ()=> entities?.damage?.(ent, amt, source||null)),
+    setEntityTag: (ent, tag)=> _serverOnly(dzs, ctx, "setEntityTag", ()=> entities?.setTag?.(ent, tag)),
+    setEntityVisible: (ent, visible)=> _serverOnly(dzs, ctx, "setEntityVisible", ()=> entities?.setVisible?.(ent, !!visible)),
+    setEntityScale: (ent, s)=> _serverOnly(dzs, ctx, "setEntityScale", ()=> entities?.setScale?.(ent, _safeNum(s,1,0.01,500))),
+    attachEntity: (child, parent, offset)=> _serverOnly(dzs, ctx, "attachEntity", ()=> entities?.attach?.(child, parent, offset||{x:0,y:0,z:0})),
     raycast: (origin, dir, maxDist=50)=>{
       const o = _resolvePos(origin) || origin;
       const d = dir || {x:0,y:0,z:-1};
@@ -266,13 +287,13 @@ export function makeBuiltins(ctx){
     playSoundAll: (soundId)=> ctx.audio?.play?.(String(soundId)),
 
     // World helpers (bridge to WorldBuilder/ZmWorld)
-    worldClear: ()=> ctx.world?.clearWorld?.() ?? ctx.world?.clear?.(),
-    addFloor: (size=50)=> ctx.world?.addFloor?.({ size }),
-    addWalls: (size=50, height=3)=> ctx.world?.addBoundaryWalls?.({ size, height }),
-    addCrate: (x=0, y=0.5, z=0)=> ctx.world?.addCrate?.({ x, y, z }),
-    setPlayerSpawn: (x=0, z=0)=> ctx.game?.players?.setSpawn?.(Number(x||0), Number(z||0)),
-    addZombieSpawn: (x=0, z=0)=> ctx.game?.zombies?.addSpawn?.(Number(x||0), Number(z||0)),
-    setWaveTarget: (n)=> ctx.game?.waves?.setTarget?.(Number(n||0)),
-    setSpawnEveryMs: (ms)=> ctx.game?.waves?.setSpawnEveryMs?.(Number(ms||0)),
+    worldClear: ()=> _serverOnly(dzs, ctx, "worldClear", ()=> ctx.world?.clearWorld?.() ?? ctx.world?.clear?.()),
+    addFloor: (size=50)=> _serverOnly(dzs, ctx, "addFloor", ()=> ctx.world?.addFloor?.({ size })),
+    addWalls: (size=50, height=3)=> _serverOnly(dzs, ctx, "addWalls", ()=> ctx.world?.addBoundaryWalls?.({ size, height })),
+    addCrate: (x=0, y=0.5, z=0)=> _serverOnly(dzs, ctx, "addCrate", ()=> ctx.world?.addCrate?.({ x, y, z })),
+    setPlayerSpawn: (x=0, z=0)=> _serverOnly(dzs, ctx, "setPlayerSpawn", ()=> ctx.game?.players?.setSpawn?.(Number(x||0), Number(z||0))),
+    addZombieSpawn: (x=0, z=0)=> _serverOnly(dzs, ctx, "addZombieSpawn", ()=> ctx.game?.zombies?.addSpawn?.(Number(x||0), Number(z||0))),
+    setWaveTarget: (n)=> _serverOnly(dzs, ctx, "setWaveTarget", ()=> ctx.game?.waves?.setTarget?.(Number(n||0))),
+    setSpawnEveryMs: (ms)=> _serverOnly(dzs, ctx, "setSpawnEveryMs", ()=> ctx.game?.waves?.setSpawnEveryMs?.(Number(ms||0))),
   };
 }

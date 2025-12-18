@@ -143,9 +143,12 @@ if(msg.t === "killed"){
     if(msg.t === "state"){
       // full roster snapshot
       const prev = this._prevHp;
+      const prevIds = new Set(this.players.keys());
       this.players.clear();
+      const nextIds = new Set();
       for(const p of (msg.players||[])){
         const pid = String(p.id);
+        nextIds.add(pid);
         const hp = Number(p.hp ?? 100);
         const old = prev.get(pid);
         if(old !== undefined && hp !== old){
@@ -158,6 +161,11 @@ if(msg.t === "killed"){
         }
         prev.set(pid, hp);
         this.players.set(p.id, p);
+      }
+      for(const pid of prevIds){
+        if(nextIds.has(pid)) continue;
+        prev.delete(pid);
+        this.engine?.events?.emit?.("net:playerDisconnect", { playerId: pid });
       }
       this.engine?.ctx?.players && (this.engine.ctx.players = (msg.players||[]).map(p=>({
         id:p.id, name:p.name, team:p.team, health:p.hp, position:p.pos, weapon:p.weaponId, raw:p
