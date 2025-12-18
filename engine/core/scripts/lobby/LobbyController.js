@@ -45,6 +45,35 @@ export class LobbyController {
     this._unsubs.push(ev.on("net:state", ()=>this.refreshPlayersFromNet()));
     this._unsubs.push(ev.on("net:welcome", ()=>this.refreshPlayersFromNet()));
     this._unsubs.push(ev.on("net:close", ()=>this.refreshPlayersFromNet()));
+    this._unsubs.push(ev.on("net:lobby_state", (msg)=>{
+      const lobby = msg.lobby || {};
+      if(lobby.matchId) this.state.setMatch(lobby.matchId);
+      if(lobby.hostPlayerId) this.state.setHost(lobby.hostPlayerId);
+      if(lobby.mode) this.state.setMode(lobby.mode);
+      if(Array.isArray(lobby.players)) this.state.setPlayers(lobby.players);
+      if(lobby.readyById) this.state.setReadyMap(lobby.readyById);
+      if(lobby.voteById) this.state.setVoteMap(lobby.voteById);
+      if(Array.isArray(lobby.maps)){
+        const resolved = lobby.maps.map((m)=>{
+          const id = String(m.id);
+          const isMp = lobby.mode === "MP";
+          const def = isMp ? getMpMap(id) : getZmMap(id);
+          return { ...def, id, name: m.name || def?.name || id };
+        });
+        this.state.setMaps(resolved);
+      }
+      if(lobby.lockedMapId) this.state.setLockedMapId(lobby.lockedMapId);
+      if(typeof lobby.motd === "string") this.state.setMotd(lobby.motd);
+      this.ui.update();
+    }));
+    this._unsubs.push(ev.on("net:hostChanged", ({ hostPlayerId })=>{
+      if(hostPlayerId) this.state.setHost(hostPlayerId);
+      this.ui.update();
+    }));
+    this._unsubs.push(ev.on("net:lobby_lock", ({ lockedMapId })=>{
+      if(lockedMapId) this.state.setLockedMapId(lockedMapId);
+      this.ui.update();
+    }));
 
     // Lobby broadcasts (future-proof for net relay)
     this._unsubs.push(ev.on("lobby:ready", ({ playerId, ready })=>{
@@ -64,7 +93,7 @@ export class LobbyController {
   }
 
   pickMaps(mode){
-    const list = mode === "mp" ? mpMaps : zmMaps;
+    const list = (mode === "MP") ? mpMaps : zmMaps;
     const choices = list.filter(m => !m.hidden).slice(0, 2);
     if(choices.length >= 2) return choices;
     if(choices.length === 1){
@@ -94,7 +123,9 @@ export class LobbyController {
   refreshPlayersFromNet(){
     const net = this.engine.ctx.net;
     let players = [];
-    if(net?.players?.size){
+    if(Array.isArray(net?.lobbyPlayers) && net.lobbyPlayers.length){
+      players = net.lobbyPlayers.map(p=>({ id: String(p.id), name: p.name || `Player${p.id}` }));
+    } else if(net?.players?.size){
       players = Array.from(net.players.values()).map(p=>({
         id: String(p.id),
         name: p.name || `Player${p.id}`,
@@ -112,7 +143,7 @@ export class LobbyController {
   }
 
   show(mode){
-    const m = mode || this.engine.ctx.session?.mode || "zm";
+    const m = mode || this.engine.ctx.session?.matchMode || "ZM";
     this.state.setMode(m);
     this.state.setMaps(this.pickMaps(m));
     if(!this.state.motd) this.state.setMotd(DEFAULT_MOTD);
@@ -129,6 +160,7 @@ export class LobbyController {
 
   handleBack(){
     this.menu.setScreen(null);
+    this.engine.ctx.net?.leaveMatch?.();
     this.onBackToMenu?.();
   }
 
@@ -159,13 +191,11 @@ export class LobbyController {
       this.engine.events.emit("menu:toast", { msg: "Only host can start" });
       return;
     }
-    if(!this.state.isReadyToStart()){
-      this.engine.events.emit("menu:toast", { msg: "Need more players ready" });
-      return;
-    }
     const winnerId = this.state.pickWinningMapId();
-    const mode = this.state.mode || this.engine.ctx.session?.mode || "zm";
-    const mapDef = mode === "mp" ? getMpMap(winnerId) : getZmMap(winnerId);
-    this.onStartGame?.(mapDef?.id || winnerId);
+    const mode = this.state.mode || this.engine.ctx.session?.matchMode || "ZM";
+    const mapDef = mode === "MP" ? getMpMap(winnerId) : getZmMap(winnerId);
+    const mapId = mapDef?.id || winnerId;
+    this.state.setLockedMapId(mapId);
+    this.engine.ctx.net?.startLobby?.();
   }
 }

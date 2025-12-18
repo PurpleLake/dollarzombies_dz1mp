@@ -1,74 +1,17 @@
 import { Button } from "../widgets/Button.js";
 
-function modeCard({ title, desc, imgA, imgB, onPick }){
-  const card = document.createElement("button");
-  card.type="button";
-  card.style.all="unset";
-  card.style.cursor="pointer";
-  card.style.display="grid";
-  card.style.gridTemplateRows="auto 1fr";
-  card.style.border="1px solid rgba(255,255,255,0.14)";
-  card.style.background="rgba(0,0,0,0.35)";
-  card.style.borderRadius="6px";
-  card.style.overflow="hidden";
-  card.style.minHeight="200px";
-  card.style.transition="transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease";
-
-  const img = document.createElement("img");
-  img.src = imgA;
-  img.alt = title;
-  img.style.width="100%";
-  img.style.height="140px";
-  img.style.objectFit="cover";
-  img.style.display="block";
-
-  function setHover(active){
-    const anim = active ? "dz-ui-text-fade 1.1s ease-in-out infinite" : "";
-    h.style.animation = anim;
-    p.style.animation = anim;
-  }
-  card.addEventListener("mouseenter", ()=>{
-    img.src = imgB;
-    card.style.transform = "translateY(-2px)";
-    card.style.boxShadow = "0 10px 24px rgba(0,0,0,0.45)";
-    card.style.borderColor = "rgba(255,255,255,0.22)";
-    setHover(true);
-  });
-  card.addEventListener("mouseleave", ()=>{
-    img.src = imgA;
-    card.style.transform = "";
-    card.style.boxShadow = "";
-    card.style.borderColor = "";
-    setHover(false);
-  });
-  card.addEventListener("click", ()=>onPick?.());
-
-  const body = document.createElement("div");
-  body.style.padding="10px";
-
-  const h = document.createElement("div");
-  h.style.fontWeight="900";
-  h.style.fontSize="14px";
-  h.style.letterSpacing="0.16em";
-  h.style.textTransform="uppercase";
-  h.textContent = title;
-
-  const p = document.createElement("div");
-  p.className="dz-help";
-  p.style.marginTop="6px";
-  p.style.fontSize="11px";
-  p.style.letterSpacing="0.04em";
-  p.textContent = desc;
-
-  body.appendChild(h);
-  body.appendChild(p);
-
-  card.appendChild(img);
-  card.appendChild(body);
-  return card;
+function modeTab({ label, active, onClick }){
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "dz-btn";
+  btn.textContent = label;
+  btn.style.opacity = active ? "1" : "0.65";
+  btn.style.borderColor = active ? "rgba(255,180,80,0.5)" : "rgba(255,255,255,0.18)";
+  btn.addEventListener("click", ()=>onClick?.());
+  return btn;
 }
 
-export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode }){
+export function MainMenuScreen({ onPlay, onClass, onSettings, onBrowser, onSolo, mode="ZM", onMode }){
   const screen = document.createElement("div");
   screen.className = "dz-screen";
 
@@ -83,37 +26,30 @@ export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode 
 
   const sub = document.createElement("div");
   sub.className = "dz-sub";
-  sub.textContent = "Pick a mode. Hover the card to preview.";
+  sub.textContent = "Select MP or ZM, then queue. Solo launches a private lobby.";
 
-  const grid = document.createElement("div");
-  grid.style.display="grid";
-  grid.style.gridTemplateColumns="1fr 1fr";
-  grid.style.gap="10px";
-  grid.style.marginTop="10px";
+  const modeRow = document.createElement("div");
+  modeRow.className = "dz-row";
+  modeRow.style.marginTop = "10px";
+  const mpBtn = modeTab({ label: "MP", active: mode === "MP", onClick: ()=>setMode("MP") });
+  const zmBtn = modeTab({ label: "ZM", active: mode === "ZM", onClick: ()=>setMode("ZM") });
+  modeRow.appendChild(mpBtn);
+  modeRow.appendChild(zmBtn);
 
-  const zm = modeCard({
-    title:"Zombies (Co-op)",
-    desc:"Up to 4 players. Survive waves, buy guns, script the map.",
-    imgA:"/public/assets/modes/zm.png",
-    imgB:"/public/assets/modes/zm_hover.png",
-    onPick: ()=>onMode?.("zm"),
-  });
-
-  const mp = modeCard({
-    title:"Multiplayer (6v6)",
-    desc:"Prototype netcode + player sync. Team support scaffolding.",
-    imgA:"/public/assets/modes/mp.png",
-    imgB:"/public/assets/modes/mp_hover.png",
-    onPick: ()=>onMode?.("mp"),
-  });
-
-  grid.appendChild(zm);
-  grid.appendChild(mp);
+  function setMode(next){
+    onMode?.(next);
+    mpBtn.style.opacity = next === "MP" ? "1" : "0.65";
+    zmBtn.style.opacity = next === "ZM" ? "1" : "0.65";
+    mpBtn.style.borderColor = next === "MP" ? "rgba(255,180,80,0.5)" : "rgba(255,255,255,0.18)";
+    zmBtn.style.borderColor = next === "ZM" ? "rgba(255,180,80,0.5)" : "rgba(255,255,255,0.18)";
+  }
 
   const row = document.createElement("div");
   row.className = "dz-row";
   row.style.marginTop="10px";
-  row.appendChild(Button({ text: (mode==="mp" ? "Start Multiplayer" : "Start Zombies"), onClick: ()=>onPlay?.() }));
+  row.appendChild(Button({ text: "Find Match", onClick: ()=>onPlay?.() }));
+  row.appendChild(Button({ text:"Start Solo", variant:"secondary", onClick: ()=>onSolo?.() }));
+  row.appendChild(Button({ text:"Server Browser", variant:"secondary", onClick: ()=>onBrowser?.() }));
   row.appendChild(Button({ text:"Loadout", variant:"secondary", onClick: ()=>onClass?.() }));
   row.appendChild(Button({ text:"Settings", variant:"secondary", onClick: ()=>onSettings?.() }));
 
@@ -124,7 +60,7 @@ export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode 
 
   panel.appendChild(title);
   panel.appendChild(sub);
-  panel.appendChild(grid);
+  panel.appendChild(modeRow);
   panel.appendChild(row);
   panel.appendChild(hint);
 

@@ -5,6 +5,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import url from "url";
+import { MatchManager } from "./MatchManager.js";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
@@ -119,56 +120,11 @@ function wsParseFrame(buf){
   return { fin, opcode, payload, rest };
 }
 
-const netState = {
-  nextId: 1,
-  clients: new Map(), // id -> { sock, name, team, mode, lastSnap }
-};
+const MAX_MATCHES = Number(process.env.MAX_MATCHES) || 10;
+const matchManager = new MatchManager({ wsSend, maxMatches: MAX_MATCHES });
 
-function assignTeam(mode){
-  // Zombies: all team 0, max 4
-  // MP: alternate team 0/1, target 12
-  if(mode === "mp"){
-    let t0=0,t1=0;
-    for(const c of netState.clients.values()){
-      if(c.mode !== "mp") continue;
-      if(c.team===0) t0++; else if(c.team===1) t1++;
-    }
-    return (t0 <= t1) ? 0 : 1;
-  }
-  return 0;
-}
-
-function canJoin(mode){
-  let count=0;
-  for(const c of netState.clients.values()) if(c.mode===mode) count++;
-  if(mode === "mp") return count < 12;
-  return count < 4;
-}
-
-function broadcastState(){
-  // Send roster snapshot to everyone (each mode sees only same-mode players)
-  for(const [id, c] of netState.clients){
-    const players = [];
-    for(const [oid, o] of netState.clients){
-      if(o.mode !== c.mode) continue;
-      const s = o.lastSnap || {};
-      players.push({
-        id: oid,
-        name: o.name,
-        team: o.team,
-        mode: o.mode,
-        hp: s.hp ?? 100,
-        pos: s.pos ?? {x:0,y:1.7,z:0},
-        rot: s.rot ?? {yaw:0,pitch:0},
-        weaponId: s.weaponId ?? null
-      });
-    }
-    wsSend(c.sock, { t:"state", players });
-  }
-}
-
-// Broadcast at 10hz
-setInterval(broadcastState, 100);
+// Tick match state (10hz)
+setInterval(()=> matchManager.tick(), 100);
 
 server.on("upgrade", (req, sock) => {
   try{
@@ -190,13 +146,9 @@ server.on("upgrade", (req, sock) => {
     sock.write(headers.join("\r\n"));
 
     // register
-    const id = String(netState.nextId++);
-    const name = `Player${id}`;
-    const mode = "zm";
-    const team = assignTeam(mode);
-
-    netState.clients.set(id, { sock, name, team, mode, lastSnap: { pos:{x:0,y:1.7,z:0}, rot:{yaw:0,pitch:0}, hp:100 } });
-    wsSend(sock, { t:"welcome", id, name, team });
+    const player = matchManager.registerPlayer(sock);
+    const playerId = player.id;
+    wsSend(sock, { t:"welcome", id: playerId, name: player.name });
 
     let buffer = Buffer.alloc(0);
     sock.on("data", (chunk)=>{
@@ -215,58 +167,47 @@ server.on("upgrade", (req, sock) => {
         let msg;
         try{ msg = JSON.parse(txt); } catch { continue; }
 
-        const client = netState.clients.get(id);
+        const client = matchManager.getPlayer(playerId);
         if(!client) continue;
 
-        if(msg.t === "hello"){
-          const desired = msg.mode === "mp" ? "mp" : "zm";
-          if(canJoin(desired)){
-            client.mode = desired;
-            client.team = assignTeam(desired);
+        if(msg.t === "queueJoin"){
+          matchManager.queueJoin(client, msg.mode);
+        } else if(msg.t === "queueLeave"){
+          matchManager.queueLeave(client);
+        } else if(msg.t === "serverList"){
+          matchManager.sendServerList(client, { showAll: Boolean(msg.showAll) });
+        } else if(msg.t === "joinMatch"){
+          matchManager.joinMatch(msg.matchId, client);
+        } else if(msg.t === "leaveMatch"){
+          matchManager.leaveMatch(client, "leaveMatch");
+        } else if(msg.t === "lobby_start"){
+          matchManager.handleLobbyStart(client);
+        } else if(msg.t === "endMatch"){
+          const match = client.matchId ? matchManager.matches.get(client.matchId) : null;
+          if(match && match.hostPlayerId === client.id){
+            matchManager.endMatch(client.matchId, "endedByHost");
           }
-          wsSend(sock, { t:"welcome", id, name: client.name, team: client.team });
-        } else if(msg.t === "setMode"){
-          const desired = msg.mode === "mp" ? "mp" : "zm";
-          if(canJoin(desired)){
-            client.mode = desired;
-            client.team = assignTeam(desired);
-          }
-          wsSend(sock, { t:"welcome", id, name: client.name, team: client.team });
         } else if(msg.t === "hit"){
-          // apply hit damage (MP only)
-          if(client.mode !== "mp") continue;
-          const targetId = String(msg.targetId || "");
-          const dmg = Math.max(1, Math.min(200, Number(msg.amount || 20)));
-          const tgt = netState.clients.get(targetId);
-          if(!tgt || tgt.mode !== "mp") continue;
-
-          tgt.lastSnap = tgt.lastSnap || {};
-          const hp0 = Number(tgt.lastSnap.hp ?? 100);
-          const hp1 = Math.max(0, hp0 - dmg);
-          tgt.lastSnap.hp = hp1;
-
-          // notify shooter + victim via lightweight events
-          wsSend(client.sock, { t:"hitConfirm", targetId, amount: dmg, hp: hp1 });
-          wsSend(tgt.sock, { t:"gotHit", attackerId: id, amount: dmg, hp: hp1 });
-          if(hp1 <= 0){
-            // simple respawn to full hp at origin; client will reposition on next spawn tick
-            tgt.lastSnap.hp = 100;
-            wsSend(tgt.sock, { t:"died", attackerId: id });
-            wsSend(client.sock, { t:"killed", targetId });
-          }
+          matchManager.handleHit(client, msg);
         } else if(msg.t === "snap"){
-          // store last snapshot
-          client.lastSnap = { pos: msg.pos, rot: msg.rot, hp: msg.hp, weaponId: msg.weaponId };
+          matchManager.handleSnapshot(client, msg);
+        } else if(msg.t === "lobby_ready"){
+          matchManager.handleLobbyReady(client, msg.ready);
+        } else if(msg.t === "lobby_vote"){
+          matchManager.handleLobbyVote(client, msg.mapId);
+        } else if(msg.t === "lobby_motd"){
+          const text = typeof msg.text === "string" ? msg.text : "";
+          matchManager.relayToMatch(client, { t:"lobby_motd", text });
         }
       }
     });
 
     sock.on("close", ()=>{
-      netState.clients.delete(id);
+      matchManager.removePlayer(playerId);
     });
 
     sock.on("end", ()=>{
-      netState.clients.delete(id);
+      matchManager.removePlayer(playerId);
     });
   } catch {
     try{ sock.destroy(); } catch {}

@@ -1,5 +1,5 @@
 export class LobbyState {
-  constructor({ mode = "zm", maps = [], motd = "MOTD: Welcome to Dollar Zombies. Be nice. Shoot straighter." } = {}){
+  constructor({ mode = "ZM", maps = [], motd = "MOTD: Welcome to Dollar Zombies. Be nice. Shoot straighter." } = {}){
     this.mode = mode;
     this.maps = maps.slice(0, 2);
     this.motd = motd;
@@ -7,10 +7,13 @@ export class LobbyState {
     this.voteByPlayerId = new Map();
     this.playerOrder = [];
     this.players = [];
+    this.hostPlayerId = null;
+    this.matchId = null;
+    this.lockedMapId = null;
   }
 
   setMode(mode){
-    this.mode = mode || "zm";
+    this.mode = mode || "ZM";
   }
 
   setMaps(maps){
@@ -40,11 +43,37 @@ export class LobbyState {
     }
   }
 
+  setReadyMap(obj = {}){
+    this.readyByPlayerId.clear();
+    for(const [id, val] of Object.entries(obj)){
+      this.readyByPlayerId.set(String(id), Boolean(val));
+    }
+  }
+
+  setVoteMap(obj = {}){
+    this.voteByPlayerId.clear();
+    for(const [id, val] of Object.entries(obj)){
+      this.voteByPlayerId.set(String(id), val ? String(val) : null);
+    }
+  }
+
+  setLockedMapId(mapId){
+    this.lockedMapId = mapId ? String(mapId) : null;
+  }
+
+  setHost(playerId){
+    this.hostPlayerId = playerId ? String(playerId) : null;
+  }
+
+  setMatch(matchId){
+    this.matchId = matchId ? String(matchId) : null;
+  }
+
   getHostId(){
+    if(this.hostPlayerId) return this.hostPlayerId;
     for(const id of this.playerOrder){
       if(this.players.find(p => String(p.id) === id)) return id;
     }
-    // fallback to first player entry
     const first = this.players[0];
     return first ? String(first.id) : null;
   }

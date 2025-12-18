@@ -15,6 +15,16 @@ export class NetClient {
     this._prevHp = new Map();
 
     this._lastSend = 0;
+
+    this.matchId = null;
+    this.matchMode = null;
+    this.matchStatus = null;
+    this.hostPlayerId = null;
+    this.lobbyPlayers = [];
+    this.serverList = [];
+    this.serverStats = { maxMatches: null, queueSizes: { MP: 0, ZM: 0 } };
+    this.queueStatus = null;
+    this.youAreHost = false;
   }
 
   connect(){
@@ -24,7 +34,6 @@ export class NetClient {
 
     ws.addEventListener("open", ()=>{
       this.connected = true;
-      this._send({ t:"hello", mode:this.mode });
       this.engine?.events?.emit?.("net:open", {});
     });
 
@@ -38,7 +47,8 @@ export class NetClient {
     ws.addEventListener("close", ()=>{
       this.connected = false;
 
-    this._prevHp = new Map();
+      this._prevHp = new Map();
+      this._clearMatchState();
       this.ws = null;
       this.engine?.events?.emit?.("net:close", {});
     });
@@ -50,7 +60,7 @@ export class NetClient {
 
   setMode(mode){
     this.mode = mode;
-    if(this.connected) this._send({ t:"setMode", mode });
+    // mode is now purely local for client-side systems
   }
 
   _onMsg(msg){
@@ -81,11 +91,11 @@ if(msg.t === "killed"){
 }
 
     if(msg.t === "lobby_ready"){
-      this.engine?.events?.emit?.("lobby:ready", { playerId: msg.playerId, ready: msg.ready });
+      this.engine?.events?.emit?.("lobby:ready", { playerId: msg.playerId, ready: msg.ready, readyCount: msg.readyCount, total: msg.total });
       return;
     }
     if(msg.t === "lobby_vote"){
-      this.engine?.events?.emit?.("lobby:vote", { playerId: msg.playerId, mapId: msg.mapId });
+      this.engine?.events?.emit?.("lobby:vote", { playerId: msg.playerId, mapId: msg.mapId, counts: msg.counts });
       return;
     }
     if(msg.t === "lobby_motd"){
@@ -93,8 +103,61 @@ if(msg.t === "killed"){
       return;
     }
 
+    if(msg.t === "queueStatus"){
+      this.queueStatus = msg;
+      this.engine?.events?.emit?.("net:queueStatus", msg);
+      return;
+    }
+    if(msg.t === "matchFound"){
+      this.matchId = msg.matchId || null;
+      this.matchMode = msg.mode || null;
+      this.matchStatus = "lobby";
+      this.hostPlayerId = msg.hostPlayerId || null;
+      this.youAreHost = Boolean(msg.youAreHost);
+      this.engine?.events?.emit?.("net:matchFound", msg);
+      return;
+    }
+    if(msg.t === "lobby_state"){
+      const lobby = msg.lobby || {};
+      this.matchId = lobby.matchId || this.matchId;
+      this.matchMode = lobby.mode || this.matchMode;
+      this.matchStatus = lobby.status || this.matchStatus || "lobby";
+      this.hostPlayerId = lobby.hostPlayerId || this.hostPlayerId;
+      this.lobbyPlayers = Array.isArray(lobby.players) ? lobby.players.slice() : [];
+      this.engine?.events?.emit?.("net:lobby_state", msg);
+      return;
+    }
+    if(msg.t === "hostChanged"){
+      this.hostPlayerId = msg.hostPlayerId || null;
+      this.engine?.events?.emit?.("net:hostChanged", msg);
+      return;
+    }
+    if(msg.t === "lobby_lock"){
+      this.engine?.events?.emit?.("net:lobby_lock", msg);
+      return;
+    }
+    if(msg.t === "matchStarted"){
+      this.matchStatus = "active";
+      this.engine?.events?.emit?.("net:matchStarted", msg);
+      return;
+    }
+    if(msg.t === "matchEnded"){
+      this.matchStatus = "ended";
+      this.engine?.events?.emit?.("net:matchEnded", msg);
+      this._clearMatchState();
+      return;
+    }
+    if(msg.t === "serverList"){
+      this.serverList = Array.isArray(msg.servers) ? msg.servers.slice() : [];
+      if(msg.maxMatches !== undefined) this.serverStats.maxMatches = msg.maxMatches;
+      if(msg.queueSizes) this.serverStats.queueSizes = msg.queueSizes;
+      this.engine?.events?.emit?.("net:serverList", msg);
+      return;
+    }
+
     if(msg.t === "state"){
       // full roster snapshot
+      if(this.matchStatus !== "active") return;
       const prev = this._prevHp;
       this.players.clear();
       for(const p of (msg.players||[])){
@@ -124,6 +187,16 @@ if(msg.t === "killed"){
     try { this.ws?.send(JSON.stringify(obj)); } catch {}
   }
 
+  _clearMatchState(){
+    this.matchId = null;
+    this.matchMode = null;
+    this.matchStatus = null;
+    this.hostPlayerId = null;
+    this.youAreHost = false;
+    this.lobbyPlayers = [];
+    this.players.clear();
+  }
+
   sendLobbyReady(ready){
     this._send({ t:"lobby_ready", playerId: this.clientId, ready: Boolean(ready) });
   }
@@ -136,7 +209,38 @@ if(msg.t === "killed"){
     this._send({ t:"lobby_motd", text });
   }
 
+  queueJoin(mode){
+    this._send({ t:"queueJoin", mode });
+  }
+
+  queueLeave(){
+    this._send({ t:"queueLeave" });
+  }
+
+  requestServerList({ showAll=false } = {}){
+    this._send({ t:"serverList", showAll: Boolean(showAll) });
+  }
+
+  joinMatch(matchId){
+    if(!matchId) return;
+    this._send({ t:"joinMatch", matchId });
+  }
+
+  leaveMatch(){
+    this._send({ t:"leaveMatch" });
+    this._clearMatchState();
+  }
+
+  startLobby(){
+    this._send({ t:"lobby_start" });
+  }
+
+  endMatch(){
+    this._send({ t:"endMatch" });
+  }
+
   sendLocalSnapshot({ pos, rot, hp, weaponId }){
+    if(this.matchStatus !== "active") return;
     const now = performance.now();
     // cap outbound to 20hz
     if(now - this._lastSend < 50) return;

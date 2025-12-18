@@ -1,5 +1,13 @@
 export const mpMaps = [
   {
+    id: "mp_base",
+    name: "Base Arena",
+    desc: "Core MP starter map.",
+    preview: "/public/assets/modes/mp_hover.png",
+    root: "/engine/game/mp/maps/mp_base",
+    entryScript: "/engine/game/mp/maps/mp_base/scripts/map.js",
+  },
+  {
     id: "mp_arena",
     name: "Arena",
     desc: "Symmetrical close-range scrim box.",
