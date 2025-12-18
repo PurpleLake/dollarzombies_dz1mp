@@ -9,6 +9,7 @@ import { MatchManager } from "./MatchManager.js";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
+const MAX_MATCHES = Number(process.env.MAX_MATCHES) || 10;
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -29,9 +30,10 @@ const MIME = {
 
 function safeJoin(root, reqPath) {
   const clean = reqPath.replace(/\0/g, "");
-  const joined = path.join(root, clean);
-  if (!joined.startsWith(root)) return null;
-  return joined;
+  const base = path.resolve(root);
+  const resolved = path.resolve(base, "." + clean);
+  if (resolved !== base && !resolved.startsWith(base + path.sep)) return null;
+  return resolved;
 }
 
 const server = http.createServer((req, res) => {
@@ -120,11 +122,91 @@ function wsParseFrame(buf){
   return { fin, opcode, payload, rest };
 }
 
-const MAX_MATCHES = Number(process.env.MAX_MATCHES) || 10;
-const matchManager = new MatchManager({ wsSend, maxMatches: MAX_MATCHES });
+const netState = {
+  nextId: 1,
+  clients: new Map(), // id -> { id, ws, name, matchId, queueMode, lastSnap }
+};
 
-// Tick match state (10hz)
-setInterval(()=> matchManager.tick(), 100);
+const matchManager = new MatchManager({ maxMatches: MAX_MATCHES, send: wsSend });
+const queues = {
+  solo: [],
+  zombies: [],
+};
+
+function getQueue(mode){
+  return mode === "zombies" ? queues.zombies : queues.solo;
+}
+
+function removeFromQueue(client){
+  if(!client?.queueMode) return;
+  const q = getQueue(client.queueMode);
+  const idx = q.indexOf(client.id);
+  if(idx >= 0) q.splice(idx, 1);
+  client.queueMode = null;
+}
+
+function sendQueueStatus(mode){
+  const q = getQueue(mode);
+  for(const id of q){
+    const c = netState.clients.get(id);
+    if(!c) continue;
+    wsSend(c.ws, { t:"queueStatus", mode, queuedCount: q.length, eta: null });
+  }
+}
+
+function tryFormMatches(mode){
+  const q = getQueue(mode);
+  const maxPlayers = mode === "zombies" ? 4 : 1;
+  while(q.length && matchManager.matches.size < MAX_MATCHES){
+    const matchId = matchManager.createMatch(mode, {});
+    if(!matchId) break;
+    const group = q.splice(0, maxPlayers);
+    for(const id of group){
+      const client = netState.clients.get(id);
+      if(!client) continue;
+      client.queueMode = null;
+      const res = matchManager.joinMatch(matchId, client);
+      if(res.ok){
+        const hostId = res.match.hostPlayerId;
+        wsSend(client.ws, {
+          t:"matchFound",
+          matchId,
+          mode,
+          hostPlayerId: hostId,
+          youAreHost: String(client.id) === String(hostId),
+        });
+      }
+    }
+    const match = matchManager.getMatch(matchId);
+    if(match) matchManager.sendLobbyState(match);
+  }
+  sendQueueStatus(mode);
+}
+
+function broadcastMatchStates(){
+  for(const match of matchManager.matches.values()){
+    if(match.status !== "active") continue;
+    const players = [];
+    for(const p of match.players.values()){
+      const s = p.lastSnap || {};
+      players.push({
+        id: p.id,
+        name: p.name,
+        team: 0,
+        mode: match.mode,
+        hp: s.hp ?? 100,
+        pos: s.pos ?? {x:0,y:1.7,z:0},
+        rot: s.rot ?? {yaw:0,pitch:0},
+        weaponId: s.weaponId ?? null
+      });
+    }
+    matchManager.broadcast(match, { t:"state", players });
+  }
+  matchManager.tick();
+}
+
+// Broadcast at 10hz
+setInterval(broadcastMatchStates, 100);
 
 server.on("upgrade", (req, sock) => {
   try{
@@ -146,9 +228,12 @@ server.on("upgrade", (req, sock) => {
     sock.write(headers.join("\r\n"));
 
     // register
-    const player = matchManager.registerPlayer(sock);
-    const playerId = player.id;
-    wsSend(sock, { t:"welcome", id: playerId, name: player.name });
+    const id = String(netState.nextId++);
+    const name = `Player${id}`;
+    const client = { id, ws: sock, name, matchId: null, queueMode: null, lastSnap: { pos:{x:0,y:1.7,z:0}, rot:{yaw:0,pitch:0}, hp:100 } };
+
+    netState.clients.set(id, client);
+    wsSend(sock, { t:"welcome", id, name });
 
     let buffer = Buffer.alloc(0);
     sock.on("data", (chunk)=>{
@@ -167,47 +252,137 @@ server.on("upgrade", (req, sock) => {
         let msg;
         try{ msg = JSON.parse(txt); } catch { continue; }
 
-        const client = matchManager.getPlayer(playerId);
+        const client = netState.clients.get(id);
         if(!client) continue;
 
-        if(msg.t === "queueJoin"){
-          matchManager.queueJoin(client, msg.mode);
-        } else if(msg.t === "queueLeave"){
-          matchManager.queueLeave(client);
-        } else if(msg.t === "serverList"){
-          matchManager.sendServerList(client, { showAll: Boolean(msg.showAll) });
-        } else if(msg.t === "joinMatch"){
-          matchManager.joinMatch(msg.matchId, client);
-        } else if(msg.t === "leaveMatch"){
-          matchManager.leaveMatch(client, "leaveMatch");
-        } else if(msg.t === "lobby_start"){
-          matchManager.handleLobbyStart(client);
-        } else if(msg.t === "endMatch"){
-          const match = client.matchId ? matchManager.matches.get(client.matchId) : null;
-          if(match && match.hostPlayerId === client.id){
-            matchManager.endMatch(client.matchId, "endedByHost");
+        if(msg.t === "hello"){
+          wsSend(sock, { t:"welcome", id, name: client.name });
+        } else if(msg.t === "setMode"){
+          wsSend(sock, { t:"welcome", id, name: client.name });
+        } else if(msg.t === "queueJoin"){
+          const mode = msg.mode === "zombies" ? "zombies" : "solo";
+          if(client.matchId) matchManager.leaveMatch(client, "queueJoin");
+          removeFromQueue(client);
+          const q = getQueue(mode);
+          if(!q.includes(client.id)){
+            q.push(client.id);
+            client.queueMode = mode;
           }
-        } else if(msg.t === "hit"){
-          matchManager.handleHit(client, msg);
-        } else if(msg.t === "snap"){
-          matchManager.handleSnapshot(client, msg);
+          sendQueueStatus(mode);
+          tryFormMatches(mode);
+        } else if(msg.t === "queueLeave"){
+          const mode = client.queueMode;
+          removeFromQueue(client);
+          if(mode) sendQueueStatus(mode);
+        } else if(msg.t === "serverList"){
+          const showAll = Boolean(msg.showAll);
+          const servers = matchManager.buildServerList({ showAll });
+          wsSend(sock, { t:"serverList", servers });
+        } else if(msg.t === "serverMaster"){
+          const diag = matchManager.buildServerMaster();
+          wsSend(sock, {
+            t:"serverMaster",
+            maxMatches: diag.maxMatches,
+            queues: { solo: queues.solo.length, zombies: queues.zombies.length },
+            matches: diag.matches,
+          });
+        } else if(msg.t === "joinMatch"){
+          const matchId = String(msg.matchId || "");
+          if(client.queueMode) removeFromQueue(client);
+          if(client.matchId && client.matchId !== matchId){
+            matchManager.leaveMatch(client, "joinMatch");
+          }
+          const res = matchManager.joinMatch(matchId, client);
+          if(!res.ok){
+            wsSend(sock, { t:"joinFailed", matchId, reason: res.reason });
+            continue;
+          }
+          const hostId = res.match.hostPlayerId;
+          wsSend(sock, {
+            t:"matchFound",
+            matchId,
+            mode: res.match.mode,
+            hostPlayerId: hostId,
+            youAreHost: String(client.id) === String(hostId),
+          });
+          matchManager.sendLobbyState(res.match);
+        } else if(msg.t === "leaveMatch"){
+          matchManager.leaveMatch(client, "left");
+        } else if(msg.t === "startMatch"){
+          if(!client.matchId) continue;
+          matchManager.startMatch(client.matchId, client);
+        } else if(msg.t === "endMatch"){
+          if(!client.matchId) continue;
+          const match = matchManager.getMatch(client.matchId);
+          if(match && String(match.hostPlayerId) === String(client.id)){
+            matchManager.endMatch(match.matchId, "hostEnded");
+          }
+        } else if(msg.t === "endMatchAdmin"){
+          const matchId = String(msg.matchId || "");
+          const match = matchManager.getMatch(matchId);
+          if(!match){
+            wsSend(sock, { t:"endMatchDenied", matchId, reason:"not_found" });
+            continue;
+          }
+          if(match.hostPlayerId && String(match.hostPlayerId) === String(client.id)){
+            matchManager.endMatch(match.matchId, "adminEnded");
+          } else {
+            wsSend(sock, { t:"endMatchDenied", matchId, reason:"not_host" });
+          }
         } else if(msg.t === "lobby_ready"){
-          matchManager.handleLobbyReady(client, msg.ready);
+          if(!client.matchId) continue;
+          matchManager.setReady(client.matchId, msg.playerId || client.id, msg.ready);
         } else if(msg.t === "lobby_vote"){
-          matchManager.handleLobbyVote(client, msg.mapId);
-        } else if(msg.t === "lobby_motd"){
-          const text = typeof msg.text === "string" ? msg.text : "";
-          matchManager.relayToMatch(client, { t:"lobby_motd", text });
+          if(!client.matchId) continue;
+          matchManager.setVote(client.matchId, msg.playerId || client.id, msg.mapId);
+        } else if(msg.t === "hit"){
+          if(!client.matchId) continue;
+          const match = matchManager.getMatch(client.matchId);
+          if(!match || match.status !== "active" || match.mode !== "solo") continue;
+          const targetId = String(msg.targetId || "");
+          const dmg = Math.max(1, Math.min(200, Number(msg.amount || 20)));
+          const tgt = match.players.get(targetId);
+          if(!tgt) continue;
+
+          tgt.lastSnap = tgt.lastSnap || {};
+          const hp0 = Number(tgt.lastSnap.hp ?? 100);
+          const hp1 = Math.max(0, hp0 - dmg);
+          tgt.lastSnap.hp = hp1;
+
+          wsSend(client.ws, { t:"hitConfirm", targetId, amount: dmg, hp: hp1 });
+          wsSend(tgt.ws, { t:"gotHit", attackerId: id, amount: dmg, hp: hp1 });
+          if(hp1 <= 0){
+            tgt.lastSnap.hp = 100;
+            wsSend(tgt.ws, { t:"died", attackerId: id });
+            wsSend(client.ws, { t:"killed", targetId });
+          }
+        } else if(msg.t === "snap"){
+          client.lastSnap = { pos: msg.pos, rot: msg.rot, hp: msg.hp, weaponId: msg.weaponId };
+          if(client.matchId){
+            const match = matchManager.getMatch(client.matchId);
+            const p = match?.players?.get(String(client.id));
+            if(p) p.lastSnap = client.lastSnap;
+          }
         }
       }
     });
 
     sock.on("close", ()=>{
-      matchManager.removePlayer(playerId);
+      const client = netState.clients.get(id);
+      if(client){
+        removeFromQueue(client);
+        matchManager.leaveMatch(client, "disconnect");
+      }
+      netState.clients.delete(id);
     });
 
     sock.on("end", ()=>{
-      matchManager.removePlayer(playerId);
+      const client = netState.clients.get(id);
+      if(client){
+        removeFromQueue(client);
+        matchManager.leaveMatch(client, "disconnect");
+      }
+      netState.clients.delete(id);
     });
   } catch {
     try{ sock.destroy(); } catch {}

@@ -677,7 +677,6 @@ export class LobbyUI {
     this.statusLine = center.statusLine;
     this.gameModePill = center.gameModePill;
     this.lockIndicator = center.lockIndicator;
-    this.lockedMap = center.lockedMap;
     this.readyBtn = center.readyBtn;
     this.startBtn = center.startBtn;
     this.mapRow = center.mapRow;
@@ -793,11 +792,6 @@ export class LobbyUI {
     headerRow.appendChild(gameModePill);
     headerRow.appendChild(lockIndicator);
 
-    const lockedMap = document.createElement("div");
-    lockedMap.className = "dz-lobby-pill";
-    lockedMap.style.display = "none";
-    headerRow.appendChild(lockedMap);
-
     const actionRow = document.createElement("div");
     actionRow.className = "dz-lobby-action-row";
     this.readyBtn = Button({ text: "Ready Up", onClick: ()=>this.onReadyToggle?.() });
@@ -825,7 +819,7 @@ export class LobbyUI {
     el.appendChild(header);
     el.appendChild(mapSection);
 
-    return { el, lobbyTitle, statusLine, gameModePill, lockIndicator, lockedMap, readyBtn: this.readyBtn, startBtn: this.startBtn, mapRow };
+    return { el, lobbyTitle, statusLine, gameModePill, lockIndicator, readyBtn: this.readyBtn, startBtn: this.startBtn, mapRow };
   }
 
   buildPlayerPanel(){
@@ -1021,44 +1015,33 @@ export class LobbyUI {
   }
 
   getDisplayMode(){
-    return this.previewMode || this.state.mode || "ZM";
-  }
-
-  getModeKey(mode){
-    if(mode === "SOLO" || mode === "ZM") return "zm";
-    if(mode === "MP") return "mp";
-    return String(mode || "zm").toLowerCase();
+    return this.previewMode || this.state.mode || "zm";
   }
 
   getDisplayMaps(mode){
-    const key = this.getModeKey(mode);
-    const maps = this.state.maps && this.state.maps.length ? this.state.maps : SAMPLE_MAPS[key];
+    const maps = this.state.maps && this.state.maps.length ? this.state.maps : SAMPLE_MAPS[mode];
     return maps || [];
   }
 
   getDisplayPlayers(mode){
-    const key = this.getModeKey(mode);
-    const players = this.state.players && this.state.players.length ? this.state.players : SAMPLE_PLAYERS[key];
+    const players = this.state.players && this.state.players.length ? this.state.players : SAMPLE_PLAYERS[mode];
     return players || [];
   }
 
   getReadyLookup(mode){
-    const key = this.getModeKey(mode);
-    return this.state.players && this.state.players.length ? this.state.readyByPlayerId : SAMPLE_READY[key];
+    return this.state.players && this.state.players.length ? this.state.readyByPlayerId : SAMPLE_READY[mode];
   }
 
   getHostId(mode){
-    const key = this.getModeKey(mode);
-    return this.state.players && this.state.players.length ? this.state.getHostId() : SAMPLE_HOST[key];
+    return this.state.players && this.state.players.length ? this.state.getHostId() : SAMPLE_HOST[mode];
   }
 
   getVoteCounts(mode){
     if(this.state.maps && this.state.maps.length){
       return this.state.getVoteCounts();
     }
-    const key = this.getModeKey(mode);
     const counts = new Map();
-    const sample = SAMPLE_VOTES[key] || {};
+    const sample = SAMPLE_VOTES[mode] || {};
     for(const [key, val] of Object.entries(sample)){
       counts.set(String(key), val);
     }
@@ -1069,13 +1052,10 @@ export class LobbyUI {
     const mode = this.getDisplayMode();
     applyLobbyTheme(this.screen, mode);
 
-    const isSolo = mode === "SOLO";
-    const isMp = mode === "MP";
-    const isZombies = !isMp;
-    this.modeLabel.textContent = isSolo ? "SINGLE PLAYER" : (isMp ? "MULTIPLAYER" : "ZOMBIES");
-    this.modeSub.textContent = isSolo ? "Solo lobby" : (isMp ? "Matchmaking lobby" : "Co-op lobby");
+    this.modeLabel.textContent = mode === "mp" ? "MULTIPLAYER" : "ZOMBIES";
+    this.modeSub.textContent = mode === "mp" ? "Matchmaking lobby" : "Co-op lobby";
     if(this.previewToggle){
-      const label = this.previewMode ? `Theme: ${isMp ? "Multiplayer" : "Zombies"}` : "Theme: Live";
+      const label = this.previewMode ? `Theme: ${mode === "mp" ? "Multiplayer" : "Zombies"}` : "Theme: Live";
       this.previewToggle.textContent = label;
     }
 
@@ -1088,25 +1068,17 @@ export class LobbyUI {
     for(const p of players){
       if(readyLookup?.get?.(String(p.id))) readyCount++;
     }
-    const canStart = this._isReadyToStart(total, readyCount, mode);
+    const needed = total > 0 ? Math.ceil(total / 2) : 0;
+    const canStart = needed > 0 && readyCount >= needed;
     const isHost = hostId && localId && hostId === String(localId);
     const status = canStart
       ? (isHost ? "Ready to start." : "Waiting for host.")
       : "Waiting for players.";
 
     this.statusLine.textContent = status;
-    this.gameModePill.textContent = isMp ? "Team Deathmatch" : (isSolo ? "Solo Survival" : "Zombies Survival");
-    this.lockIndicator.textContent = canStart ? "Ready" : "Locked";
+    this.gameModePill.textContent = mode === "mp" ? "Team Deathmatch" : "Zombies Survival";
+    this.lockIndicator.textContent = canStart ? "Ready" : `Locked - Need ${needed}`;
     this.lockIndicator.classList.toggle("is-ready", canStart);
-
-    const lockedId = this.state.lockedMapId;
-    if(lockedId){
-      const match = (this.state.maps || []).find(m => String(m.id) === String(lockedId));
-      this.lockedMap.textContent = `Locked: ${match?.name || lockedId}`;
-      this.lockedMap.style.display = "";
-    } else if(this.lockedMap){
-      this.lockedMap.style.display = "none";
-    }
 
     const localReady = localId ? Boolean(readyLookup?.get?.(String(localId))) : false;
     this.readyBtn.textContent = localReady ? "Unready" : "Ready Up";
@@ -1184,7 +1156,7 @@ export class LobbyUI {
       const bg = map.preview ? `url(${map.preview})` : "linear-gradient(135deg,#1a232e,#0e131a)";
       thumb.style.backgroundImage = bg;
       name.textContent = map.name || map.id;
-      meta.textContent = map.meta || (mode === "MP" ? "6v6 - Core" : (mode === "SOLO" ? "Solo - Survival" : "Co-op - Survival"));
+      meta.textContent = map.meta || (mode === "mp" ? "6v6 - Core" : "Co-op - Survival");
       const votes = counts.get(String(map.id)) || 0;
       badge.textContent = `Votes: ${votes}`;
       if(isDisabled){
@@ -1204,7 +1176,7 @@ export class LobbyUI {
 
   renderPlayers(localId, hostId, mode){
     this.playerList.innerHTML = "";
-    const maxSlots = mode === "MP" ? 12 : (mode === "SOLO" ? 1 : 4);
+    const maxSlots = mode === "mp" ? 12 : 4;
     const players = this.getDisplayPlayers(mode).slice(0, maxSlots);
     const readyLookup = this.getReadyLookup(mode);
 
@@ -1267,11 +1239,5 @@ export class LobbyUI {
     if(value <= 120) return 2;
     if(value <= 160) return 1;
     return 0;
-  }
-
-  _isReadyToStart(total, readyCount, mode){
-    if(total <= 0) return false;
-    if(mode === "MP") return readyCount >= Math.ceil(total / 2);
-    return readyCount >= 1;
   }
 }

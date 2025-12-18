@@ -1,142 +1,129 @@
 import { Button } from "../widgets/Button.js";
 
 function modeLabel(mode){
-  if(mode === "SOLO") return "Solo";
-  if(mode === "ZM") return "Zombies";
-  if(mode === "MP") return "Multiplayer";
-  return String(mode || "Unknown");
+  if(mode === "zombies") return "Zombies";
+  if(mode === "solo") return "Solo";
+  return mode || "Unknown";
 }
 
-function formatAge(seconds){
-  const s = Math.max(0, Number(seconds || 0));
-  if(s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return `${m}m ${r}s`;
-}
-
-export function ServerBrowserScreen({ onBack, onRefresh, onJoin } = {}){
+export function ServerBrowserScreen({ servers = [], showAll = false, onRefresh, onJoin, onBack } = {}){
   const screen = document.createElement("div");
   screen.className = "dz-screen";
 
   const panel = document.createElement("div");
   panel.className = "dz-panel";
-  panel.style.width = "min(980px, 94vw)";
-  panel.style.height = "min(86vh, 760px)";
-  panel.style.display = "flex";
-  panel.style.flexDirection = "column";
-  panel.style.gap = "10px";
+  panel.style.width = "min(1100px, 94vw)";
+  panel.style.padding = "14px";
 
-  const header = document.createElement("div");
-  header.className = "dz-row";
-
-  const title = document.createElement("div");
+  const title = document.createElement("h1");
   title.className = "dz-title";
-  title.textContent = "Server Browser";
-
-  const spacer = document.createElement("div");
-  spacer.className = "dz-spacer";
-
-  const refreshBtn = Button({ text:"Refresh", onClick: ()=>onRefresh?.() });
-  const backBtn = Button({ text:"Back", variant:"secondary", onClick: ()=>onBack?.() });
-  header.appendChild(title);
-  header.appendChild(spacer);
-  header.appendChild(refreshBtn);
-  header.appendChild(backBtn);
+  title.textContent = "SERVER BROWSER";
 
   const sub = document.createElement("div");
   sub.className = "dz-sub";
-  sub.textContent = "Browse joinable lobbies running on this server.";
+  sub.textContent = "Browse active lobbies and join an open match.";
 
-  const table = document.createElement("div");
-  table.style.display = "grid";
-  table.style.gridTemplateColumns = "1.2fr 0.8fr 0.8fr 1fr 0.8fr 0.9fr 0.6fr 0.7fr";
-  table.style.gap = "8px";
-  table.style.padding = "8px 4px";
-  table.style.fontSize = "12px";
-  table.style.letterSpacing = "0.06em";
-  table.style.textTransform = "uppercase";
-  table.style.color = "var(--ui-text-dim)";
+  const controls = document.createElement("div");
+  controls.className = "dz-row";
+  controls.style.marginTop = "10px";
 
-  const columns = ["Match", "Mode", "Status", "Map", "Players", "Host", "Age", "Join"];
-  for(const col of columns){
-    const cell = document.createElement("div");
-    cell.textContent = col;
-    table.appendChild(cell);
-  }
+  const toggleWrap = document.createElement("label");
+  toggleWrap.className = "dz-help";
+  toggleWrap.style.display = "flex";
+  toggleWrap.style.alignItems = "center";
+  toggleWrap.style.gap = "8px";
 
-  const listWrap = document.createElement("div");
-  listWrap.style.flex = "1";
-  listWrap.style.overflow = "auto";
-  listWrap.style.display = "flex";
-  listWrap.style.flexDirection = "column";
-  listWrap.style.gap = "8px";
+  const toggle = document.createElement("input");
+  toggle.type = "checkbox";
+  toggle.checked = Boolean(showAll);
+  toggleWrap.appendChild(toggle);
+  toggleWrap.appendChild(document.createTextNode("Show all matches"));
 
-  const empty = document.createElement("div");
-  empty.className = "dz-help";
-  empty.textContent = "No lobby matches found.";
+  const refreshBtn = Button({ text:"Refresh", onClick: ()=>onRefresh?.(toggle.checked) });
+  const backBtn = Button({ text:"Back", variant:"secondary", onClick: ()=>onBack?.() });
 
-  function setServers(servers){
-    listWrap.innerHTML = "";
-    const list = Array.isArray(servers) ? servers : [];
-    if(list.length === 0){
-      listWrap.appendChild(empty);
+  controls.appendChild(toggleWrap);
+  controls.appendChild(document.createElement("div")).className = "dz-spacer";
+  controls.appendChild(refreshBtn);
+  controls.appendChild(backBtn);
+
+  const list = document.createElement("div");
+  list.style.marginTop = "12px";
+  list.style.display = "grid";
+  list.style.gap = "8px";
+
+  function renderRows(items){
+    list.innerHTML = "";
+    if(!items.length){
+      const empty = document.createElement("div");
+      empty.className = "dz-help";
+      empty.textContent = "No lobbies found.";
+      list.appendChild(empty);
       return;
     }
-    for(const server of list){
+    for(const srv of items){
       const row = document.createElement("div");
       row.style.display = "grid";
-      row.style.gridTemplateColumns = "1.2fr 0.8fr 0.8fr 1fr 0.8fr 0.9fr 0.6fr 0.7fr";
-      row.style.gap = "8px";
+      row.style.gridTemplateColumns = "120px 120px 120px 1fr 100px 120px";
       row.style.alignItems = "center";
-      row.style.padding = "10px 8px";
+      row.style.gap = "10px";
+      row.style.padding = "10px 12px";
+      row.style.border = "1px solid rgba(255,255,255,0.14)";
       row.style.borderRadius = "10px";
-      row.style.border = "1px solid rgba(255,255,255,0.08)";
-      row.style.background = "rgba(0,0,0,0.28)";
+      row.style.background = "rgba(0,0,0,0.35)";
 
-      const matchId = document.createElement("div");
-      matchId.textContent = server.matchId || "Unknown";
+      const id = document.createElement("div");
+      id.style.fontFamily = "var(--ui-mono)";
+      id.style.fontSize = "12px";
+      id.textContent = `#${srv.matchId}`;
 
       const mode = document.createElement("div");
-      mode.textContent = modeLabel(server.mode);
+      mode.textContent = modeLabel(srv.mode);
 
       const status = document.createElement("div");
-      status.textContent = server.status || "lobby";
-
-      const players = document.createElement("div");
-      players.textContent = `${server.playerCount || 0}/${server.maxPlayers || 0}`;
-
-      const map = document.createElement("div");
-      const mapOptions = Array.isArray(server.mapOptions) ? server.mapOptions.map(m=>m.name || m.id) : [];
-      map.textContent = mapOptions.length ? mapOptions.join(" / ") : "Voting";
+      status.textContent = srv.status || "lobby";
 
       const host = document.createElement("div");
-      host.textContent = server.hostName || "Unknown";
+      host.style.display = "grid";
+      host.style.gap = "2px";
+      const hostLine = document.createElement("div");
+      hostLine.textContent = srv.hostName ? `Host: ${srv.hostName}` : "Host: n/a";
+      const meta = document.createElement("div");
+      meta.className = "dz-help";
+      const mapName = srv.mapName || "n/a";
+      const age = srv.ageSeconds ?? 0;
+      meta.textContent = `Map: ${mapName} | Age: ${age}s`;
+      host.appendChild(hostLine);
+      host.appendChild(meta);
 
-      const age = document.createElement("div");
-      age.textContent = formatAge(server.ageSeconds);
+      const players = document.createElement("div");
+      const max = srv.maxPlayers ?? "?";
+      players.textContent = `${srv.playerCount ?? 0}/${max}`;
 
-      const joinCell = document.createElement("div");
-      const joinBtn = Button({ text:"Join", variant:"secondary", onClick: ()=>onJoin?.(server.matchId) });
-      joinCell.appendChild(joinBtn);
+      const joinBtn = Button({ text:"Join", onClick: ()=>onJoin?.(srv.matchId) });
+      joinBtn.disabled = srv.status !== "lobby";
 
-      row.appendChild(matchId);
+      row.appendChild(id);
       row.appendChild(mode);
       row.appendChild(status);
-      row.appendChild(map);
-      row.appendChild(players);
       row.appendChild(host);
-      row.appendChild(age);
-      row.appendChild(joinCell);
-      listWrap.appendChild(row);
+      row.appendChild(players);
+      row.appendChild(joinBtn);
+      list.appendChild(row);
     }
   }
 
-  panel.appendChild(header);
+  toggle.addEventListener("change", ()=>onRefresh?.(toggle.checked));
+  renderRows(Array.isArray(servers) ? servers : []);
+
+  panel.appendChild(title);
   panel.appendChild(sub);
-  panel.appendChild(table);
-  panel.appendChild(listWrap);
+  panel.appendChild(controls);
+  panel.appendChild(list);
   screen.appendChild(panel);
 
-  return { screen, setServers };
+  return {
+    screen,
+    setServers: (items)=>renderRows(Array.isArray(items) ? items : []),
+  };
 }

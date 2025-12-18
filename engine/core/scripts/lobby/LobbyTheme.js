@@ -37,11 +37,10 @@ export const LOBBY_THEMES = {
 };
 
 export function applyLobbyTheme(el, mode){
-  const key = (mode === "SOLO" || mode === "ZM") ? "zm" : (mode === "MP" ? "mp" : mode);
-  const theme = LOBBY_THEMES[key] || LOBBY_THEMES.mp;
+  const theme = LOBBY_THEMES[mode] || LOBBY_THEMES.mp;
   if(!el || !theme) return;
   for(const [key, value] of Object.entries(theme)){
     el.style.setProperty(`--${key}`, value);
   }
-  el.dataset.lobbyMode = key || "mp";
+  el.dataset.lobbyMode = mode || "mp";
 }

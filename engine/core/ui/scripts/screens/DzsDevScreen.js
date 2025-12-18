@@ -22,7 +22,6 @@ function mkCard(){
 }
 
 export function DzsDevScreen({ engine, onClose }){
-  let selectedMatchId = null;
   const screen = document.createElement("div");
   screen.className = "dz-screen";
   screen.style.background = "rgba(0,0,0,0.62)";
@@ -74,12 +73,12 @@ export function DzsDevScreen({ engine, onClose }){
     { value:"weapons", label:"WEAPONS", meta:"defs + live state" },
     { value:"entities", label:"ENTITIES (ZOMBIES)", meta:"spawns + counts" },
     { value:"clients", label:"CLIENTS (PLAYERS)", meta:"input + stats" },
+    { value:"servermaster", label:"SERVER MASTER", meta:"matches + queues" },
     { value:"dzs", label:"DSZ HELP", meta:"builtins + syntax" },
-    // TODO: gate Server Master behind login once auth is wired.
-    { value:"serverMaster", label:"SERVER MASTER", meta:"matches + queues" },
   ];
 
   let active = "dzs";
+  let selectedMatchId = null;
   const nav = ListBox({
     label: "Sections",
     items: navItems,
@@ -118,13 +117,6 @@ export function DzsDevScreen({ engine, onClose }){
 
   rightHeader.appendChild(rightTitle);
   rightHeader.appendChild(rightHint);
-
-  const serverRefreshBtn = Button({
-    text: "Refresh",
-    variant: "secondary",
-    onClick: ()=> engine?.ctx?.net?.requestServerList?.({ showAll: true }),
-  });
-  rightHeader.appendChild(serverRefreshBtn);
 
   const body = mkCard();
   body.style.flex = "1";
@@ -171,7 +163,6 @@ export function DzsDevScreen({ engine, onClose }){
   function renderWeapons(){
     rightTitle.textContent = "WEAPONS";
     rightHint.textContent = "Press ` or ' to toggle. This overlay does not pause the game yet.";
-    serverRefreshBtn.style.display = "none";
     scroll.innerHTML = "";
 
     const db = engine?.ctx?.weapons;
@@ -226,7 +217,6 @@ export function DzsDevScreen({ engine, onClose }){
   function renderEntities(){
     rightTitle.textContent = "ENTITIES (ZOMBIES)";
     rightHint.textContent = "Press ` or ' to toggle. This overlay does not pause the game yet.";
-    serverRefreshBtn.style.display = "none";
     scroll.innerHTML = "";
 
     const z = engine?.ctx?.game?.zombies;
@@ -250,7 +240,6 @@ export function DzsDevScreen({ engine, onClose }){
   function renderClients(){
     rightTitle.textContent = "CLIENTS (PLAYERS)";
     rightHint.textContent = "Press ` or ' to toggle. This overlay does not pause the game yet.";
-    serverRefreshBtn.style.display = "none";
     scroll.innerHTML = "";
 
     const p = engine?.ctx?.player;
@@ -273,11 +262,91 @@ export function DzsDevScreen({ engine, onClose }){
     scroll.appendChild(hint);
   }
 
+  function renderServerMaster(){
+    rightTitle.textContent = "SERVER MASTER";
+    rightHint.textContent = "Server diagnostics (TODO: gate behind login).";
+    scroll.innerHTML = "";
+    // TODO: gate Server Master behind login before shipping.
+    if(!engine?.ctx?.serverMaster){
+      engine?.ctx?.net?.sendServerMaster?.();
+    }
+
+    const actions = mkCard();
+    actions.style.display = "flex";
+    actions.style.alignItems = "center";
+    actions.style.justifyContent = "space-between";
+    actions.style.gap = "10px";
+    const label = document.createElement("div");
+    label.className = "dz-help";
+    label.textContent = selectedMatchId ? `Selected match: #${selectedMatchId}` : "Live server snapshot.";
+    const actionRow = document.createElement("div");
+    actionRow.className = "dz-row";
+    const refresh = Button({ text:"Refresh", variant:"secondary", onClick: ()=>engine?.ctx?.net?.sendServerMaster?.() });
+    const endBtn = Button({ text:"End Selected", variant:"secondary", onClick: ()=>{
+      if(selectedMatchId) engine?.ctx?.net?.sendEndMatchAdmin?.(selectedMatchId);
+    }});
+    endBtn.disabled = !selectedMatchId;
+    actionRow.appendChild(refresh);
+    actionRow.appendChild(endBtn);
+    actions.appendChild(label);
+    actions.appendChild(actionRow);
+    scroll.appendChild(actions);
+
+    const data = engine?.ctx?.serverMaster || {};
+    const queues = data.queues || {};
+
+    const summary = mkCard();
+    summary.appendChild(sectionTitle("Queues"));
+    const s = document.createElement("div");
+    s.className = "dz-help";
+    s.textContent = `Solo: ${queues.solo ?? 0} | Zombies: ${queues.zombies ?? 0} | Max Matches: ${data.maxMatches ?? "n/a"}`;
+    summary.appendChild(s);
+    scroll.appendChild(summary);
+
+    const matchesWrap = mkCard();
+    matchesWrap.appendChild(sectionTitle("Matches"));
+    const list = document.createElement("div");
+    list.style.display = "flex";
+    list.style.flexDirection = "column";
+    list.style.gap = "8px";
+    list.style.marginTop = "10px";
+
+    const matches = Array.isArray(data.matches) ? data.matches : [];
+    if(!matches.length){
+      const empty = document.createElement("div");
+      empty.className = "dz-help";
+      empty.textContent = "No active matches.";
+      list.appendChild(empty);
+    } else {
+      for(const match of matches){
+        const row = mkCard();
+        row.style.padding = "8px 10px";
+        row.style.background = "rgba(0,0,0,0.3)";
+        row.style.cursor = "pointer";
+        row.style.borderColor = String(match.matchId) === String(selectedMatchId)
+          ? "rgba(255,200,120,0.6)"
+          : "rgba(255,255,255,0.08)";
+        const line = document.createElement("div");
+        line.className = "dz-help";
+        const players = `${match.playerCount ?? 0}/${match.maxPlayers ?? "?"}`;
+        line.textContent = `#${match.matchId} | ${match.mode} | ${match.status} | ${players} | Host: ${match.hostName || "n/a"} | Uptime: ${match.uptimeSeconds ?? 0}s`;
+        row.appendChild(line);
+        row.addEventListener("click", ()=>{
+          selectedMatchId = String(match.matchId);
+          renderServerMaster();
+        });
+        list.appendChild(row);
+      }
+    }
+
+    matchesWrap.appendChild(list);
+    scroll.appendChild(matchesWrap);
+  }
+
   function renderDzs(){
     rightTitle.textContent = "DSZ HELP";
-    scroll.innerHTML = "";
-    serverRefreshBtn.style.display = "none";
     rightHint.textContent = "Press ` or ' to toggle. This overlay does not pause the game yet.";
+    scroll.innerHTML = "";
 
     // Controls at top of body for DZS help
     const syntax = mkCard();
@@ -409,87 +478,6 @@ export function DzsDevScreen({ engine, onClose }){
     scroll.appendChild(docsWrap);
   }
 
-  function renderServerMaster(){
-    rightTitle.textContent = "SERVER MASTER";
-    rightHint.textContent = "TODO: gate this panel behind login.";
-    serverRefreshBtn.style.display = "";
-    scroll.innerHTML = "";
-
-    const note = document.createElement("div");
-    note.className = "dz-help";
-    note.textContent = "Live diagnostics for matches and queues.";
-    scroll.appendChild(note);
-
-    const stats = engine?.ctx?.net?.serverStats || {};
-    const queues = stats.queueSizes || { MP: 0, ZM: 0 };
-
-    const statsCard = mkCard();
-    statsCard.appendChild(sectionTitle("Server"));
-    const s = document.createElement("div");
-    s.className = "dz-help";
-    s.textContent = `MAX_MATCHES: ${stats.maxMatches ?? "?"} | Queues: MP ${queues.MP ?? 0}, ZM ${queues.ZM ?? 0}`;
-    statsCard.appendChild(s);
-    scroll.appendChild(statsCard);
-
-    const listCard = mkCard();
-    listCard.appendChild(sectionTitle("Active Matches"));
-    const list = document.createElement("div");
-    list.style.display = "flex";
-    list.style.flexDirection = "column";
-    list.style.gap = "8px";
-
-    const matches = engine?.ctx?.net?.serverList || [];
-    if(matches.length === 0){
-      const none = document.createElement("div");
-      none.className = "dz-help";
-      none.textContent = "No matches found.";
-      list.appendChild(none);
-    } else {
-      for(const m of matches){
-        const row = document.createElement("div");
-        row.className = "dz-help";
-        row.textContent = `#${m.matchId} | ${m.mode} | ${m.status} | ${m.playerCount}/${m.maxPlayers} | host ${m.hostName} | ${m.ageSeconds}s`;
-        row.style.cursor = "pointer";
-        row.style.padding = "6px 8px";
-        row.style.borderRadius = "8px";
-        row.style.border = selectedMatchId === m.matchId
-          ? "1px solid rgba(255,180,80,0.6)"
-          : "1px solid rgba(255,255,255,0.08)";
-        row.style.background = selectedMatchId === m.matchId
-          ? "rgba(255,180,80,0.12)"
-          : "rgba(0,0,0,0.15)";
-        row.addEventListener("click", ()=>{
-          selectedMatchId = m.matchId;
-          renderServerMaster();
-        });
-        list.appendChild(row);
-      }
-    }
-    listCard.appendChild(list);
-    scroll.appendChild(listCard);
-
-    const actions = document.createElement("div");
-    actions.className = "dz-row";
-    const endBtn = Button({
-      text: "End Selected",
-      variant: "secondary",
-      onClick: ()=>{
-        const net = engine?.ctx?.net;
-        if(!selectedMatchId){
-          engine?.events?.emit?.("menu:toast", { msg: "Select a match first." });
-          return;
-        }
-        if(net?.matchId && String(net.matchId) === String(selectedMatchId)){
-          net.endMatch?.();
-        } else {
-          engine?.events?.emit?.("menu:toast", { msg: "Host/admin only (stub)." });
-        }
-      },
-    });
-    actions.appendChild(endBtn);
-    scroll.appendChild(actions);
-  }
-
   function renderRight(){
     // Clear body and rebuild per section
     body.innerHTML = "";
@@ -503,12 +491,12 @@ export function DzsDevScreen({ engine, onClose }){
     if(active === "weapons") renderWeapons();
     else if(active === "entities") renderEntities();
     else if(active === "clients") renderClients();
-    else if(active === "serverMaster") renderServerMaster();
+    else if(active === "servermaster") renderServerMaster();
     else renderDzs();
   }
 
   search.addEventListener("input", ()=>{ if(active === "dzs") renderRight(); });
-  engine?.events?.on?.("net:serverList", ()=>{ if(active === "serverMaster") renderRight(); });
+  engine?.events?.on?.("server:master", ()=>{ if(active === "servermaster") renderServerMaster(); });
   renderRight();
 
   right.appendChild(rightHeader);

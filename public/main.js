@@ -135,73 +135,45 @@ engine.events.on("weapon:reloadEnd", ({ clip, reserve }) => {
   if(ammoText) ammoText.textContent = ` ${clip}/${reserve}`;
 });
 
-engine.events.on("net:serverList", ({ servers })=>{
-  if(serverBrowserView) serverBrowserView.setServers(servers || []);
-});
-
-engine.events.on("net:matchFound", (msg)=>{
-  const mode = normalizeMatchMode(msg.mode || session.matchMode || "ZM");
-  session.matchMode = mode;
-  session.gameMode = getGameModeForMatch(mode);
-  setClientState(CLIENT_STATE.LOBBY);
-  showLobby(mode);
-});
-
-engine.events.on("net:lobby_state", (msg)=>{
-  if(clientState === CLIENT_STATE.LOBBY || clientState === CLIENT_STATE.IN_MATCH) return;
-  const lobby = msg?.lobby || {};
-  if(!lobby.matchId) return;
-  const mode = normalizeMatchMode(lobby.mode || session.matchMode || "ZM");
-  session.matchMode = mode;
-  session.gameMode = getGameModeForMatch(mode);
-  setClientState(CLIENT_STATE.LOBBY);
-  showLobby(mode);
-});
-
-engine.events.on("net:lobby_lock", ({ lockedMapId })=>{
-  if(lockedMapId) session.mapId = lockedMapId;
-});
-
-engine.events.on("net:matchStarted", (msg)=>{
-  if(msg?.lockedMapId) session.mapId = msg.lockedMapId;
-  setClientState(CLIENT_STATE.IN_MATCH);
-  startGame();
-});
-
-engine.events.on("net:matchEnded", ({ reason })=>{
-  menu.toast?.(`Match ended${reason ? `: ${reason}` : ""}`);
-  setClientState(CLIENT_STATE.MENU);
-  showMainMenu();
-});
-
 // Scripts + game
 const scripts = new ScriptLoader({ engine });
 let game = null;
 
-function normalizeMatchMode(mode){
-  const m = String(mode || "").toUpperCase();
-  if(m === "ZOMBIES") return "ZM";
-  if(m === "SOLO") return "SOLO";
-  if(m === "MP") return "MP";
-  return "ZM";
-}
-
-function getGameModeForMatch(matchMode){
-  if(matchMode === "MP") return "mp";
-  if(matchMode === "ZM" || matchMode === "SOLO") return "zm";
-  return "zm";
-}
-
-const initialMatchMode = normalizeMatchMode(options.get("matchMode"));
-const initialGameMode = getGameModeForMatch(initialMatchMode);
+const initialMode = options.get("gameMode") || "zm";
 const defaultZm = getZmMap(options.get("zmMap"));
 const defaultMp = getMpMap(options.get("mpMap"));
 const session = engine.ctx.session = {
-  matchMode: initialMatchMode,
-  gameMode: initialGameMode,
+  mode: initialMode,
   mapSelections: { zm: defaultZm.id, mp: defaultMp.id },
-  mapId: initialGameMode === "mp" ? defaultMp.id : defaultZm.id,
+  mapId: initialMode === "mp" ? defaultMp.id : defaultZm.id,
 };
+engine.ctx.net?.setMode?.(session.mode);
+
+const ClientState = Object.freeze({
+  MENU: "MENU",
+  QUEUEING: "QUEUEING",
+  LOBBY: "LOBBY",
+  IN_MATCH: "IN_MATCH",
+});
+
+const matchSession = engine.ctx.matchSession = {
+  state: ClientState.MENU,
+  matchId: null,
+  matchMode: null,
+  hostPlayerId: null,
+};
+
+function uiModeToMatch(mode){
+  return mode === "zm" ? "zombies" : "solo";
+}
+
+function matchModeToUi(mode){
+  return mode === "zombies" ? "zm" : "mp";
+}
+
+function setClientState(next){
+  matchSession.state = next;
+}
 
 function getModeMaps(mode){
   return mode === "mp" ? mpMaps : zmMaps;
@@ -236,18 +208,80 @@ const lobby = new LobbyController({
   menu,
   options,
   onStartGame: (mapId)=>{
-    const mode = session.gameMode || "zm";
+    const mode = session.mode || "zm";
     session.mapId = mapId;
     if(mode === "mp") session.mapSelections.mp = mapId;
     else session.mapSelections.zm = mapId;
-    startGame();
+    engine.ctx.net?.sendStartMatch?.();
   },
-  onBackToMenu: ()=> showMainMenu(),
+  onBackToMenu: ()=> leaveMatchToMenu(),
   onCreateClass: ()=> showClassSelect({ returnToLobby:true }),
 });
 engine.ctx.lobby = { controller: lobby, state: lobby.state };
 
-function getCurrentMapDef(mode=session.gameMode){
+let queueView = null;
+let serverBrowserView = null;
+const serverBrowserState = { servers: [], showAll: false };
+
+engine.events.on("queue:status", ({ mode, queuedCount })=>{
+  if(!queueView || matchSession.state !== ClientState.QUEUEING) return;
+  if(mode !== matchSession.matchMode) return;
+  queueView.setStatus?.(`In queue: ${queuedCount} player${queuedCount === 1 ? "" : "s"}`);
+});
+
+engine.events.on("match:found", ({ matchId, mode, hostPlayerId })=>{
+  matchSession.matchId = String(matchId);
+  matchSession.matchMode = mode;
+  matchSession.hostPlayerId = hostPlayerId || null;
+  const uiMode = matchModeToUi(mode);
+  session.mode = uiMode;
+  session.mapId = resolveMapIdForMode(uiMode);
+  showLobby(uiMode);
+});
+
+engine.events.on("match:lobbyState", (payload)=>{
+  if(!payload?.matchId) return;
+  matchSession.matchId = String(payload.matchId);
+  matchSession.matchMode = payload.mode || matchSession.matchMode;
+  matchSession.hostPlayerId = payload.hostPlayerId || matchSession.hostPlayerId;
+});
+
+engine.events.on("match:started", ({ matchId })=>{
+  if(matchSession.matchId && String(matchSession.matchId) !== String(matchId)) return;
+  const mode = matchModeToUi(matchSession.matchMode || "zombies");
+  session.mode = mode;
+  startGame(mode);
+});
+
+engine.events.on("match:ended", ({ matchId, reason })=>{
+  if(matchSession.matchId && String(matchSession.matchId) !== String(matchId)) return;
+  matchSession.matchId = null;
+  matchSession.matchMode = null;
+  matchSession.hostPlayerId = null;
+  destroyCurrentGame();
+  showMainMenu();
+  if(reason) menu.toast(`Match ended: ${reason}`);
+});
+
+engine.events.on("match:joinFailed", ({ reason })=>{
+  menu.toast(`Join failed: ${reason || "unknown"}`);
+  showServerBrowser();
+});
+
+engine.events.on("match:endDenied", ({ reason })=>{
+  menu.toast(`End denied: ${reason || "not permitted"}`);
+});
+
+engine.events.on("server:list", ({ servers })=>{
+  serverBrowserState.servers = Array.isArray(servers) ? servers : [];
+  serverBrowserView?.setServers?.(serverBrowserState.servers);
+});
+
+engine.events.on("server:master", (payload)=>{
+  engine.ctx.serverMaster = payload;
+});
+
+function getCurrentMapDef(mode=session.mode){
   const pick = isMapIdValidForMode(mode, session.mapId)
     ? session.mapId
     : resolveMapIdForMode(mode);
@@ -275,34 +309,6 @@ function destroyCurrentGame(){
   resetEcs();
 }
 
-const CLIENT_STATE = {
-  MENU: "MENU",
-  QUEUEING: "QUEUEING",
-  LOBBY: "LOBBY",
-  IN_MATCH: "IN_MATCH",
-};
-let clientState = CLIENT_STATE.MENU;
-
-function stopActiveMatch(){
-  engine.ctx.timeScale = 1;
-  if(document.pointerLockElement) document.exitPointerLock();
-  destroyCurrentGame();
-  if(engine.loop.running) engine.stop();
-  menu.showHud(false);
-}
-
-function setClientState(next){
-  if(clientState === next) return;
-  if(clientState === CLIENT_STATE.IN_MATCH && next !== CLIENT_STATE.IN_MATCH){
-    stopActiveMatch();
-  }
-  if(next !== CLIENT_STATE.IN_MATCH && engine.loop.running){
-    engine.stop();
-  }
-  clientState = next;
-  engine.events.emit("client:state", { state: next });
-}
-
 // Apply options live
 options.onChange((data, key, value)=>{
   if(key === "mouseSensitivity" && engine.ctx.input) engine.ctx.input.mouse.sensitivity = value;
@@ -312,7 +318,7 @@ options.onChange((data, key, value)=>{
   }
 });
 
-async function loadAllScripts(mode=session.gameMode){
+async function loadAllScripts(mode=session.mode){
   if(logEl) logEl.innerHTML = "";
   uiLog("Loading manifest...");
   const manifestCandidates = (mode === "mp")
@@ -363,14 +369,15 @@ async function loadMapForMode(mode, mapDef){
   return spawns;
 }
 
-async function startGame(){
-  const mode = session.gameMode || "zm";
+async function startGame(modeOverride){
+  const mode = modeOverride || session.mode || "zm";
   const mapDef = getCurrentMapDef(mode);
   session.mapId = mapDef.id;
   try{
     options.set("gameMode", mode);
     if(mode === "mp") options.set("mpMap", mapDef.id);
     else options.set("zmMap", mapDef.id);
+    engine.ctx.net?.setMode?.(mode);
 
     destroyCurrentGame();
     game = (mode === "mp") ? new MpGame({ engine, scripts }) : new ZmGame({ engine, scripts });
@@ -392,6 +399,7 @@ async function startGame(){
     menu.setScreen(null);
     menu.setOverlay(null);
     menu.showHud(true);
+    setClientState(ClientState.IN_MATCH);
   } catch (err){
     uiLog('[scripts] ERROR: ' + (err?.stack || err));
     menu.toast('Script load failed (see log)');
@@ -415,11 +423,49 @@ function showSettings({ overlay=false } = {}){
   else menu.setScreen(node);
 }
 
+function showQueue(mode=session.mode){
+  const label = mode === "mp" ? "Solo" : "Zombies";
+  const view = QueueScreen({
+    modeLabel: label,
+    onCancel: ()=> leaveQueueToMenu(),
+  });
+  queueView = view;
+  menu.showHud(false);
+  menu.setOverlay(null);
+  menu.setScreen(view.screen);
+}
+
+function queueForMode(mode){
+  session.mode = mode || "zm";
+  session.mapId = resolveMapIdForMode(session.mode);
+  matchSession.matchMode = uiModeToMatch(session.mode);
+  matchSession.matchId = null;
+  matchSession.hostPlayerId = null;
+  setClientState(ClientState.QUEUEING);
+  showQueue(session.mode);
+  engine.ctx.net?.sendQueueJoin?.(matchSession.matchMode);
+}
+
+function leaveQueueToMenu(){
+  engine.ctx.net?.sendQueueLeave?.();
+  matchSession.matchMode = null;
+  setClientState(ClientState.MENU);
+  showMainMenu();
+}
+
+function leaveMatchToMenu(){
+  engine.ctx.net?.sendLeaveMatch?.();
+  matchSession.matchId = null;
+  matchSession.matchMode = null;
+  matchSession.hostPlayerId = null;
+  destroyCurrentGame();
+  showMainMenu();
+}
+
 function showMapSelect(mode="zm"){
   const maps = mode === "mp" ? mpMaps : zmMaps;
   const fallback = maps.find(m=>!m.disabled) || maps[0];
-  session.gameMode = mode;
-  if(mode === "mp") session.matchMode = "MP";
+  session.mode = mode;
   let selectedId = (mode === "mp" ? session.mapSelections.mp : session.mapSelections.zm) || fallback?.id;
   if(maps.find(m=>m.id === selectedId && m.disabled)) selectedId = fallback?.id;
   session.mapId = selectedId;
@@ -444,60 +490,44 @@ function showMapSelect(mode="zm"){
     onPlay: (id)=>{
       applySelection(id || selectedId);
       // Map select flow now routes through lobby start
-      showLobby(mode);
+      queueForMode(mode);
     },
   }));
 }
-
-function showLobby(mode=session.matchMode){
-  const m = normalizeMatchMode(mode || session.matchMode || "ZM");
-  session.matchMode = m;
-  session.gameMode = getGameModeForMatch(m);
-  session.mapId = resolveMapIdForMode(session.gameMode);
-  lobby.show(m);
-}
-
-let serverBrowserView = null;
 
 function showServerBrowser(){
-  setClientState(CLIENT_STATE.MENU);
+  const view = ServerBrowserScreen({
+    servers: serverBrowserState.servers,
+    showAll: serverBrowserState.showAll,
+    onRefresh: (showAll)=>{
+      serverBrowserState.showAll = Boolean(showAll);
+      engine.ctx.net?.sendServerList?.(serverBrowserState.showAll);
+    },
+    onJoin: (matchId)=> engine.ctx.net?.sendJoinMatch?.(matchId),
+    onBack: ()=> showMainMenu(),
+  });
+  serverBrowserView = view;
   menu.showHud(false);
   menu.setOverlay(null);
-  serverBrowserView = ServerBrowserScreen({
-    onBack: ()=> showMainMenu(),
-    onRefresh: ()=> engine.ctx.net?.requestServerList?.({ showAll: false }),
-    onJoin: (matchId)=>{
-      if(matchId) engine.ctx.net?.joinMatch?.(matchId);
-    },
-  });
-  menu.setScreen(serverBrowserView.screen);
-  engine.ctx.net?.requestServerList?.({ showAll: false });
+  menu.setScreen(view.screen);
+  engine.ctx.net?.sendServerList?.(serverBrowserState.showAll);
 }
 
-function queueForMatch(mode=session.matchMode){
-  const m = normalizeMatchMode(mode || "ZM");
-  session.matchMode = m;
-  session.gameMode = getGameModeForMatch(m);
-  setClientState(CLIENT_STATE.QUEUEING);
-  menu.showHud(false);
-  menu.setOverlay(null);
-  menu.setScreen(QueueScreen({
-    mode: m,
-    onCancel: ()=>{
-      engine.ctx.net?.queueLeave?.();
-      setClientState(CLIENT_STATE.MENU);
-      showMainMenu();
-    },
-  }));
-  engine.ctx.net?.queueJoin?.(m);
+function showLobby(mode=session.mode){
+  const m = mode || "zm";
+  session.mode = m;
+  session.mapId = resolveMapIdForMode(m);
+  engine.ctx.net?.setMode?.(m);
+  setClientState(ClientState.LOBBY);
+  lobby.show(m);
 }
 
 
 function showClassSelect({ returnToLobby=false } = {}){
-  const mode = session.gameMode || "zm";
+  const mode = session.mode || "zm";
   if(mode === "mp"){
     menu.toast("Multiplayer class editor coming soon.");
-    return returnToLobby ? showLobby(session.matchMode) : showMainMenu();
+    return returnToLobby ? showLobby(mode) : showMainMenu();
   }
   menu.showHud(false);
   menu.setOverlay(null);
@@ -510,32 +540,28 @@ function showClassSelect({ returnToLobby=false } = {}){
     weapons,
     selectedPrimaryId: currentPrimary,
     selectedSecondaryId: currentSecondary,
-    onBack: ()=> returnToLobby ? showLobby(session.matchMode) : showMainMenu(),
+    onBack: ()=> returnToLobby ? showLobby(session.mode) : showMainMenu(),
     onConfirm: ({ primaryId, secondaryId })=>{
       if(primaryId) options.set("loadoutPrimary", primaryId);
       if(secondaryId) options.set("loadoutSecondary", secondaryId);
       menu.toast(`Loadout set: ${primaryId || "none"} / ${secondaryId || "none"}`);
-      if(returnToLobby) showLobby(session.matchMode);
+      if(returnToLobby) showLobby(session.mode);
       else showMainMenu();
     }
   }));
 }
 
 function showMainMenu(){
-  setClientState(CLIENT_STATE.MENU);
-  serverBrowserView = null;
+  setClientState(ClientState.MENU);
+  engine.ctx.net?.setMode?.("idle");
   menu.showHud(false);
   menu.setOverlay(null);
   menu.setScreen(MainMenuScreen({
-    mode: session.matchMode,
-    onMode: (m)=> {
-      session.matchMode = m;
-      options.set("matchMode", m);
-    },
-    onPlay: ()=> queueForMatch(session.matchMode),
-    onSolo: ()=> queueForMatch("SOLO"),
-    onBrowser: ()=> showServerBrowser(),
+    mode: session.mode,
+    onMode: (m)=> queueForMode(m),
+    onPlay: ()=> queueForMode(session.mode),
     onClass: ()=> showClassSelect(),
+    onBrowser: ()=> showServerBrowser(),
     onSettings: ()=> showSettings({ overlay:false }),
   }));
 }
@@ -562,12 +588,17 @@ function resumeFromPause(){
 }
 
 function exitToMenu(){
+  engine.ctx.timeScale = 1;
   menu.setOverlay(null);
-  engine.ctx.net?.leaveMatch?.();
+  engine.ctx.net?.sendLeaveMatch?.();
+  engine.ctx.net?.sendQueueLeave?.();
+  matchSession.matchId = null;
+  matchSession.matchMode = null;
+  matchSession.hostPlayerId = null;
   // soft-reset
   try { engine.ctx.game?.zombies?.clear?.(); } catch {}
   try { engine.ctx.game?.world?.clearWorld?.(); } catch {}
-  stopActiveMatch();
+  destroyCurrentGame();
   showMainMenu();
 }
 

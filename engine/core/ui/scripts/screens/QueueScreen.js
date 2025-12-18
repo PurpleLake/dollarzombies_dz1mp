@@ -1,43 +1,40 @@
 import { Button } from "../widgets/Button.js";
 
-function getModeLabel(mode){
-  if(mode === "SOLO") return "Single Player";
-  if(mode === "ZM") return "Zombies (Co-op)";
-  if(mode === "MP") return "Multiplayer";
-  return "Match";
-}
-
-export function QueueScreen({ mode="ZM", onCancel } = {}){
+export function QueueScreen({ modeLabel = "Match", onCancel } = {}){
   const screen = document.createElement("div");
   screen.className = "dz-screen";
 
   const panel = document.createElement("div");
   panel.className = "dz-panel";
-  panel.style.width = "min(640px, 92vw)";
-  panel.style.textAlign = "center";
+  panel.style.width = "min(560px, 92vw)";
+  panel.style.padding = "16px";
 
-  const title = document.createElement("div");
+  const title = document.createElement("h1");
   title.className = "dz-title";
-  title.textContent = "Matchmaking";
+  title.textContent = "FINDING MATCH";
 
   const sub = document.createElement("div");
   sub.className = "dz-sub";
-  sub.textContent = `Queueing for ${getModeLabel(mode)}...`;
+  sub.textContent = `Searching for ${modeLabel} lobby...`;
 
-  const hint = document.createElement("div");
-  hint.className = "dz-help";
-  hint.textContent = "You can cancel at any time and browse lobbies instead.";
+  const status = document.createElement("div");
+  status.className = "dz-help";
+  status.style.marginTop = "10px";
+  status.textContent = "In queue...";
 
   const row = document.createElement("div");
   row.className = "dz-row";
-  row.style.justifyContent = "center";
-  row.style.marginTop = "10px";
-  row.appendChild(Button({ text:"Cancel Queue", variant:"secondary", onClick: ()=>onCancel?.() }));
+  row.style.marginTop = "12px";
+  row.appendChild(Button({ text: "Cancel", variant: "secondary", onClick: ()=>onCancel?.() }));
 
   panel.appendChild(title);
   panel.appendChild(sub);
-  panel.appendChild(hint);
+  panel.appendChild(status);
   panel.appendChild(row);
   screen.appendChild(panel);
-  return screen;
+
+  return {
+    screen,
+    setStatus: (text)=>{ status.textContent = text || ""; },
+  };
 }
