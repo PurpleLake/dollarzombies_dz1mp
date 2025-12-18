@@ -6,6 +6,6 @@
 on zm:purchase {
   if(event && event.type == "wallbuy"){
     cashAdd event.player 50
-    iPrintLn event.player ^2Cashback +50
+    iPrintLn event.player "^2Cashback +50"
   }
 }

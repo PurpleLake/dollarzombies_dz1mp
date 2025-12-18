@@ -9,7 +9,7 @@ on onGameStart {
 
 welcomeLoop(){
   endon "game_end"
-  iPrintLnBoldAll ^6Welcome to the builtins showcase
+  iPrintLnBoldAll "^6Welcome to the builtins showcase"
   wait 2
   log Builtins running
 }
@@ -20,7 +20,7 @@ on onPlayerSpawned {
 
 starterHud(){
   endon "disconnect"
-  id = createHudText(self, #ffffff, 20, 60, Spawned!, "")
+  id = createHudText(self, #ffffff, 20, 60, "Spawned!", "")
   wait 3
   removeHud(id)
 }

@@ -4,9 +4,9 @@
 // @tags zombies, ui
 
 on zm:waveStart {
-  iPrintLnBoldAll ^3Wave ^7 started
+  iPrintLnBoldAll "^3Wave ^7 started"
 }
 
 on zm:waveEnd {
-  iPrintLnAll ^7Wave completed
+  iPrintLnAll "^7Wave completed"
 }

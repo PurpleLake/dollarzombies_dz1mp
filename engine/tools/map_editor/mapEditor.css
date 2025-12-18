@@ -1,0 +1,296 @@
+.dz-map-editor{
+  background: rgba(6, 8, 12, 0.86);
+  color: #e7eef6;
+}
+
+.dzme-panel{
+  width: min(1400px, 96vw);
+  height: min(88vh, 900px);
+  margin: 4vh auto 0 auto;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 12px;
+  background: rgba(10, 14, 20, 0.75);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+.dzme-header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dzme-title{
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  font-size: 15px;
+}
+
+.dzme-body{
+  display: grid;
+  grid-template-columns: 280px 1fr 320px;
+  gap: 12px;
+  min-height: 0;
+}
+
+.dzme-left,
+.dzme-right{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dzme-center{
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: #0a0f18;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dzme-view-header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  background: rgba(0,0,0,0.25);
+}
+
+.dzme-view-title{
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.dzme-view-tabs{
+  display: flex;
+  gap: 6px;
+}
+
+.dzme-view-tab{
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.dzme-view-tab.is-active{
+  background: rgba(255,200,120,0.2);
+  border-color: rgba(255,200,120,0.4);
+}
+
+.dzme-view-body{
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.dzme-view-body.mode-2d{
+  grid-template-columns: 1fr;
+}
+
+.dzme-view-body.mode-3d{
+  grid-template-columns: 1fr;
+}
+
+.dzme-view-body.mode-split{
+  grid-template-columns: 1fr 1fr;
+}
+
+.dzme-view-body.mode-2d .dzme-view-3d,
+.dzme-view-body.mode-3d .dzme-view-2d{
+  display: none;
+}
+
+.dzme-view{
+  position: relative;
+  min-height: 0;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #0c111a;
+}
+
+.dzme-preview-3d{
+  position: absolute;
+  inset: 0;
+}
+
+.dzme-canvas{
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: crosshair;
+}
+
+.dzme-footer{
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dzme-actions{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dzme-card{
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(0,0,0,0.25);
+  overflow: hidden;
+}
+
+.dzme-card-title{
+  font-weight: 800;
+  font-size: 12px;
+  text-transform: uppercase;
+  opacity: 0.8;
+  margin-bottom: 8px;
+}
+
+.dzme-tool-list{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dzme-tool{
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dzme-tool.is-active{
+  background: rgba(255,200,120,0.2);
+  border-color: rgba(255,200,120,0.4);
+}
+
+.dzme-toggle{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.dzme-list{
+  overflow: auto;
+  max-height: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dzme-list-header{
+  font-size: 11px;
+  text-transform: uppercase;
+  opacity: 0.7;
+  margin-top: 4px;
+}
+
+.dzme-list-item{
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+  cursor: pointer;
+  font-family: var(--ui-mono, monospace);
+  font-size: 12px;
+}
+
+.dzme-template-list{
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.dzme-template{
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  color: inherit;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.dzme-inspector,
+.dzme-validation{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.dzme-field{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dzme-label{
+  font-size: 11px;
+  opacity: 0.7;
+  text-transform: uppercase;
+}
+
+.dzme-input{
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(0,0,0,0.4);
+  color: inherit;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.dzme-help{
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.dzme-error{
+  color: #ffb4a8;
+  font-size: 12px;
+}
+
+.dzme-warn{
+  color: #ffd88a;
+  font-size: 12px;
+}
+
+@media (max-width: 1020px){
+  .dzme-body{
+    grid-template-columns: 1fr;
+  }
+  .dzme-left,
+  .dzme-right{
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .dzme-center{
+    min-height: 300px;
+  }
+  .dzme-view-body.mode-split{
+    grid-template-columns: 1fr;
+  }
+}

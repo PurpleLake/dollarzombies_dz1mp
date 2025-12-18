@@ -410,8 +410,7 @@ export class MapEditorCanvas {
           handle = this.handleAt({ sx:e.offsetX, sy:e.offsetY }, item);
         }
         this.onSelect?.(hit);
-        this.drag = { mode: handle ? "resize" : "move", type: hit.type, id: hit.id, start: clone(item), startWorld: pos, handle };
-        this.onMutate(()=>{}, { commit:true });
+        this.drag = { mode: handle ? "resize" : "move", type: hit.type, id: hit.id, start: clone(item), startWorld: pos, handle, started:false };
         return;
       }
       this.onSelect?.(null);
@@ -427,7 +426,7 @@ export class MapEditorCanvas {
         list.push({ id, x:start.x, y:start.y, w:1, h:1, rot:0, name:"", type:"" });
       }, { commit:true });
       this.onSelect?.({ type:this.tool, id });
-      this.drag = { mode:"resize", type:this.tool, id, startWorld:start, handle:"se" };
+      this.drag = { mode:"resize", type:this.tool, id, startWorld:start, handle:"se", started:true };
       return;
     }
 
@@ -489,6 +488,10 @@ export class MapEditorCanvas {
     if(!item) return;
 
     if(this.drag.mode === "move"){
+      if(!this.drag.started){
+        this.onMutate(()=>{}, { commit:true });
+        this.drag.started = true;
+      }
       this.onMutate((draft)=>{
         const l = (this.drag.type === "wall" ? draft.walls :
           this.drag.type === "zone" ? draft.zones :
@@ -506,6 +509,10 @@ export class MapEditorCanvas {
     }
 
     if(this.drag.mode === "resize"){
+      if(!this.drag.started){
+        this.onMutate(()=>{}, { commit:true });
+        this.drag.started = true;
+      }
       const start = this.drag.startWorld || { x:item.x, y:item.y };
       const dx = snapPos.x - start.x;
       const dy = snapPos.y - start.y;

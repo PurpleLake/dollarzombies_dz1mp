@@ -65,7 +65,7 @@ export class MapCompiler {
     this.engine = engine;
   }
 
-  compile(dzmapData, { mode="zm", clearWorld=true } = {}){
+  compile(dzmapData, { mode="zm", clearWorld=true, mapDef=null } = {}){
     if(!dzmapData || dzmapData.format !== "dzmap"){
       throw new Error("Invalid dzmap data");
     }
@@ -81,6 +81,11 @@ export class MapCompiler {
     }
 
     const mapCtx = ensureMapCtx(engine, mode, dzmapData.meta?.name);
+    if(mapDef){
+      mapCtx.id = mapDef.id || mapCtx.map;
+      mapCtx.root = mapDef.root || mapCtx.root;
+      mapCtx.def = mapDef;
+    }
     mapCtx.bounds = {
       minX: bounds.minX,
       minY: bounds.minY,
@@ -131,7 +136,7 @@ export class MapCompiler {
     for(const p of props){
       if(!isFiniteNumber(p?.x) || !isFiniteNumber(p?.y)) continue;
       const type = String(p?.type || "crate");
-      if(type === "crate" && world?.addCrate){
+      if(world?.addCrate){
         world.addCrate({
           x: Number(p.x),
           y: 0.5 * (Number(p.scale || 1)),

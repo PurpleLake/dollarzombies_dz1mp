@@ -1,0 +1,36 @@
+{
+  "format": "dzmap",
+  "version": 1,
+  "meta": {
+    "name": "mp_base",
+    "modes": ["MP"],
+    "author": "Host",
+    "createdAt": 0
+  },
+  "bounds": { "minX": -50, "minY": -50, "maxX": 50, "maxY": 50 },
+  "walls": [
+    { "id":"w1", "x":0, "y":0, "w":16, "h":2, "rot":0 }
+  ],
+  "props": [
+    { "id":"p1", "type":"crate", "x":10, "y":8, "rot":0, "scale":1 }
+  ],
+  "spawns": {
+    "player": [
+      { "id":"ps1", "x":-20, "y":0, "rot":90, "team":"A" },
+      { "id":"ps2", "x":-20, "y":10, "rot":90, "team":"A" },
+      { "id":"ps3", "x":-20, "y":-10, "rot":90, "team":"A" },
+      { "id":"ps4", "x":-20, "y":20, "rot":90, "team":"A" },
+      { "id":"ps5", "x":20, "y":0, "rot":-90, "team":"B" },
+      { "id":"ps6", "x":20, "y":10, "rot":-90, "team":"B" },
+      { "id":"ps7", "x":20, "y":-10, "rot":-90, "team":"B" },
+      { "id":"ps8", "x":20, "y":20, "rot":-90, "team":"B" }
+    ],
+    "zombie": []
+  },
+  "lights": [
+    { "id":"l1", "kind":"ambient", "x":0, "y":0, "z":6, "intensity":0.6, "color":"#ffffff" }
+  ],
+  "zones": [
+    { "id":"z1", "name":"mid_zone", "x":0, "y":0, "w":16, "h":16 }
+  ]
+}

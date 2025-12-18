@@ -5,12 +5,12 @@
 
 on zm:waveStart {
   level.doublePoints = 1
-  iPrintLnBoldAll ^2Double Points ACTIVE
+  iPrintLnBoldAll "^2Double Points ACTIVE"
 }
 
 on zm:waveEnd {
   level.doublePoints = 0
-  iPrintLnBoldAll ^1Double Points ENDED
+  iPrintLnBoldAll "^1Double Points ENDED"
 }
 
 on zm:zombieDeath {

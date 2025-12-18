@@ -4,6 +4,7 @@ import { ECS } from "/engine/core/scripts/ECS.js";
 import { ZmGame } from "/engine/game/zm/scripts/ZmGame.js";
 import { MapCompiler, dzmapToDzs } from "./MapCompiler.js";
 import { MapEditorCanvas } from "./MapEditorCanvas.js";
+import { MapEditorPreview3D } from "./MapEditorPreview3D.js";
 import { UndoStack } from "./UndoStack.js";
 import { validateDzmap } from "./validateDzmap.js";
 
@@ -39,6 +40,26 @@ function defaultMapData(){
     lights: [],
     zones: [],
   };
+}
+
+function normalizeMapData(data){
+  const next = clone(data || {});
+  next.format = "dzmap";
+  next.version = Number(next.version || 1);
+  next.meta = next.meta || {};
+  next.meta.name = next.meta.name || "untitled";
+  next.meta.modes = Array.isArray(next.meta.modes) ? next.meta.modes : ["ZM"];
+  next.meta.author = next.meta.author || "Host";
+  next.meta.createdAt = next.meta.createdAt || Date.now();
+  next.bounds = next.bounds || { minX:-25, minY:-25, maxX:25, maxY:25 };
+  next.walls = Array.isArray(next.walls) ? next.walls : [];
+  next.props = Array.isArray(next.props) ? next.props : [];
+  next.spawns = next.spawns || { player: [], zombie: [] };
+  next.spawns.player = Array.isArray(next.spawns.player) ? next.spawns.player : [];
+  next.spawns.zombie = Array.isArray(next.spawns.zombie) ? next.spawns.zombie : [];
+  next.lights = Array.isArray(next.lights) ? next.lights : [];
+  next.zones = Array.isArray(next.zones) ? next.zones : [];
+  return next;
 }
 
 function safeParse(text){
@@ -93,11 +114,12 @@ export function MapEditorScreen({ engine, onClose }){
   let snap = true;
   let testing = false;
   let testSession = null;
+  let viewMode = "split";
 
   const stored = localStorage.getItem(WORKSPACE_KEY);
   const parsed = stored ? safeParse(stored) : null;
   if(parsed?.format === "dzmap"){
-    mapData = parsed;
+    mapData = normalizeMapData(parsed);
   }
 
   const screen = document.createElement("div");
@@ -133,9 +155,51 @@ export function MapEditorScreen({ engine, onClose }){
   const footer = document.createElement("div");
   footer.className = "dzme-footer";
 
+  const viewHeader = document.createElement("div");
+  viewHeader.className = "dzme-view-header";
+  const viewTitle = document.createElement("div");
+  viewTitle.className = "dzme-view-title";
+  viewTitle.textContent = "Views";
+  const viewTabs = document.createElement("div");
+  viewTabs.className = "dzme-view-tabs";
+  const viewModes = [
+    { value:"2d", label:"2D" },
+    { value:"3d", label:"3D" },
+    { value:"split", label:"Split" },
+  ];
+  const viewButtons = [];
+  for(const v of viewModes){
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "dzme-view-tab";
+    btn.textContent = v.label;
+    btn.dataset.mode = v.value;
+    btn.addEventListener("click", ()=> setViewMode(v.value));
+    viewButtons.push(btn);
+    viewTabs.appendChild(btn);
+  }
+  viewHeader.appendChild(viewTitle);
+  viewHeader.appendChild(viewTabs);
+
+  const viewBody = document.createElement("div");
+  viewBody.className = "dzme-view-body";
+
+  const view2d = document.createElement("div");
+  view2d.className = "dzme-view dzme-view-2d";
   const canvas = document.createElement("canvas");
   canvas.className = "dzme-canvas";
-  center.appendChild(canvas);
+  view2d.appendChild(canvas);
+
+  const view3d = document.createElement("div");
+  view3d.className = "dzme-view dzme-view-3d";
+  const previewHost = document.createElement("div");
+  previewHost.className = "dzme-preview-3d";
+  view3d.appendChild(previewHost);
+
+  viewBody.appendChild(view2d);
+  viewBody.appendChild(view3d);
+  center.appendChild(viewHeader);
+  center.appendChild(viewBody);
 
   const canvasView = new MapEditorCanvas({
     canvas,
@@ -152,7 +216,13 @@ export function MapEditorScreen({ engine, onClose }){
       refreshInspector();
       refreshList();
       canvasView.render();
+      preview3d.update();
     },
+  });
+
+  const preview3d = new MapEditorPreview3D({
+    container: previewHost,
+    getState: ()=>({ mapData, selected }),
   });
 
   const tools = [
@@ -171,6 +241,17 @@ export function MapEditorScreen({ engine, onClose }){
     toolButtons.forEach(btn=>{
       btn.classList.toggle("is-active", btn.dataset.tool === next);
     });
+  }
+
+  function setViewMode(next){
+    viewMode = next;
+    viewBody.classList.remove("mode-2d", "mode-3d", "mode-split");
+    viewBody.classList.add(`mode-${viewMode}`);
+    viewButtons.forEach(btn=>{
+      btn.classList.toggle("is-active", btn.dataset.mode === viewMode);
+    });
+    canvasView.resize();
+    preview3d.resize();
   }
 
   const toolWrap = document.createElement("div");
@@ -240,7 +321,7 @@ export function MapEditorScreen({ engine, onClose }){
       if(!res.ok) return engine.events.emit("dev:toast", { msg:"Template load failed" });
       const data = await res.json();
       undo.push(mapData);
-      mapData = data;
+      mapData = normalizeMapData(data);
       selected = null;
       refreshAll();
     });
@@ -336,7 +417,7 @@ export function MapEditorScreen({ engine, onClose }){
         return;
       }
       undo.push(mapData);
-      mapData = data;
+      mapData = normalizeMapData(data);
       selected = null;
       refreshAll();
     };
@@ -534,6 +615,7 @@ export function MapEditorScreen({ engine, onClose }){
     refreshInspector();
     refreshValidation(false);
     canvasView.render();
+    preview3d.update();
   }
 
   function exportDzmap(){
@@ -657,10 +739,12 @@ export function MapEditorScreen({ engine, onClose }){
     if(testing) stopTest();
     document.removeEventListener("keydown", onKeyDown);
     canvasView.dispose();
+    preview3d.dispose();
     onClose?.();
   }
 
   setTool("select");
+  setViewMode(viewMode);
   refreshAll();
 
   return screen;

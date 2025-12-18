@@ -33,6 +33,7 @@ import { DevModule } from "/engine/game/zm/dev/scripts/DevModule.js";
 import { zmMaps, getZmMap } from "/engine/game/zm/maps/MapRegistry.js";
 import { mpMaps, getMpMap } from "/engine/game/mp/maps/MapRegistry.js";
 import { LobbyController } from "/engine/core/scripts/lobby/LobbyController.js";
+import { MapCompiler } from "/engine/tools/map_editor/MapCompiler.js";
 
 // Debug log (bottom-left)
 const logEl = document.getElementById("log");
@@ -119,6 +120,23 @@ engine.events.on("trigger:prompt", (e)=>{
 const dev = new DevModule({ engine });
 engine.ctx.devModule = dev;
 engine.events.on("menu:toast", ({ msg })=> menu.toast(msg));
+
+const dzsStudioChannel = new BroadcastChannel("dzs-studio");
+dzsStudioChannel.onmessage = (ev)=>{
+  const data = ev?.data || {};
+  const mgr = engine?.ctx?.dzsStudio;
+  if(!mgr) return;
+  if(data.t === "dzs:install"){
+    if(!data.scriptId) return;
+    mgr.installDzs?.({ scriptId: data.scriptId, filename: data.filename, text: data.text, ownerId: data.ownerId });
+  } else if(data.t === "dzs:disable"){
+    if(!data.scriptId) return;
+    mgr.disable?.(data.scriptId);
+  } else if(data.t === "dzs:remove"){
+    if(!data.scriptId) return;
+    mgr.remove?.(data.scriptId);
+  }
+};
 
 // Hook UI updates
 engine.events.on("log", ({ msg }) => uiLog(msg));
@@ -354,6 +372,18 @@ async function loadMapForMode(mode, mapDef){
   engine.ctx.world = builder;
   engine.ctx.worldBuilder = builder;
   try { builder.clearWorld?.(); } catch {}
+
+  const dzmapPath = mapDef.entryDzmap || (mapDef.entryScript && mapDef.entryScript.endsWith(".dzmap") ? mapDef.entryScript : null);
+  if(dzmapPath){
+    const res = await fetch(dzmapPath, { cache:"no-store" });
+    if(!res.ok) throw new Error(`Failed to load dzmap: ${dzmapPath}`);
+    const data = await res.json();
+    const compiler = new MapCompiler(engine);
+    const build = compiler.compile(data, { mode, clearWorld:false, mapDef });
+    const spawns = build.spawnPoints || {};
+    engine.events.emit(`${mode}:mapLoaded`, { map: mapDef.id });
+    return spawns;
+  }
 
   const mod = await import(mapDef.entryScript + `?v=${Date.now()}`);
   const buildResult = (typeof mod.buildMap === "function") ? await mod.buildMap(engine, builder) : null;

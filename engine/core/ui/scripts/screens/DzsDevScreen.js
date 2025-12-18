@@ -1,5 +1,6 @@
 import { Button } from "../widgets/Button.js";
 import { ListBox } from "../widgets/ListBox.js";
+import { MapEditorScreen } from "/engine/tools/map_editor/MapEditorScreen.js";
 
 const GSC_SAMPLE_PATH = "/public/scripts/gsc_sample.dzs";
 const GSC_SAMPLE_TEXT = `# GSC-style sample script for custom modes.
@@ -202,6 +203,7 @@ export function DzsDevScreen({ engine, onClose }){
     { value:"clients", label:"CLIENTS (PLAYERS)", meta:"input + stats" },
     { value:"servermaster", label:"SERVER MASTER", meta:"matches + queues" },
     { value:"dzs", label:"DSZ HELP", meta:"builtins + syntax" },
+    { value:"mapeditor", label:"MAP EDITOR", meta:"build .dzmap layouts" },
     { value:"studio", label:"SCRIPT STUDIO", meta:"library + editor + inject" },
   ];
 
@@ -474,6 +476,10 @@ export function DzsDevScreen({ engine, onClose }){
   }
 
   async function injectScript({ filename, text, skipQueue=false } = {}){
+    if(String(filename || "").toLowerCase().endsWith(".dzmap")){
+      studioLog("Inject blocked: .dzmap is map data only.");
+      return;
+    }
     const host = isHost();
     if(!host){
       studioLog("Inject blocked: host-only.");
@@ -926,6 +932,29 @@ export function DzsDevScreen({ engine, onClose }){
     scroll.appendChild(docsWrap);
   }
 
+  function renderMapEditor(){
+    rightTitle.textContent = "MAP EDITOR";
+    rightHint.textContent = "Grid editor for .dzmap files.";
+    scroll.innerHTML = "";
+
+    const intro = mkCard();
+    const desc = document.createElement("div");
+    desc.className = "dz-help";
+    desc.textContent = "Build DZ maps with walls, spawns, props, lights, and zones. Export .dzmap or test in-engine.";
+    const row = document.createElement("div");
+    row.className = "dz-row";
+    row.style.marginTop = "10px";
+    const openBtn = Button({ text:"Open Map Editor", variant:"secondary", onClick: ()=>{
+      const menu = engine.ctx.menu;
+      if(!menu) return;
+      menu.setOverlay(MapEditorScreen({ engine, onClose: ()=> menu.setOverlay(null) }));
+    }});
+    row.appendChild(openBtn);
+    intro.appendChild(desc);
+    intro.appendChild(row);
+    scroll.appendChild(intro);
+  }
+
   function renderStudioLibrary(){
     const list = studioRefs.libraryList;
     if(!list) return;
@@ -1038,236 +1067,34 @@ export function DzsDevScreen({ engine, onClose }){
 
   function renderStudio(){
     rightTitle.textContent = "SCRIPT STUDIO";
-    rightHint.textContent = "Live DZS mods in the pre-game lobby (host only).";
+    rightHint.textContent = "Open the full editor in a new tab.";
     scroll.innerHTML = "";
-    scroll.style.overflow = "hidden";
 
-    const studioWrap = document.createElement("div");
-    studioWrap.style.display = "grid";
-    studioWrap.style.gridTemplateRows = "1fr 180px";
-    studioWrap.style.gap = "10px";
-    studioWrap.style.height = "100%";
-    studioWrap.style.minHeight = "0";
+    const card = mkCard();
+    card.appendChild(sectionTitle("Standalone Studio"));
+    const info = document.createElement("div");
+    info.className = "dz-help";
+    info.textContent = "The Script Studio now opens in a dedicated tab with the full editor, library, and install controls.";
 
-    const main = document.createElement("div");
-    main.style.display = "grid";
-    main.style.gridTemplateColumns = "280px 1fr 320px";
-    main.style.gap = "10px";
-    main.style.minHeight = "0";
+    const meta = document.createElement("div");
+    meta.className = "dz-help";
+    const matchId = engine?.ctx?.matchSession?.matchId || "n/a";
+    const hostId = engine?.ctx?.matchSession?.hostPlayerId || "n/a";
+    const clientId = engine?.ctx?.net?.clientId || "n/a";
+    meta.textContent = `Match: ${matchId} | Host: ${hostId} | You: ${clientId}`;
 
-    const libraryCard = mkCard();
-    libraryCard.style.display = "flex";
-    libraryCard.style.flexDirection = "column";
-    libraryCard.style.gap = "8px";
-    libraryCard.style.minHeight = "0";
-    libraryCard.appendChild(sectionTitle("Library"));
-
-    const libSearch = document.createElement("input");
-    libSearch.className = "dz-input";
-    libSearch.placeholder = "Search scripts";
-    libSearch.addEventListener("input", renderStudioLibrary);
-    studioRefs.searchInput = libSearch;
-
-    const libList = document.createElement("div");
-    libList.style.flex = "1";
-    libList.style.minHeight = "0";
-    libList.style.overflow = "auto";
-    libList.style.display = "flex";
-    libList.style.flexDirection = "column";
-    libList.style.gap = "8px";
-    studioRefs.libraryList = libList;
-
-    libraryCard.appendChild(libSearch);
-    libraryCard.appendChild(libList);
-
-    const editorCard = mkCard();
-    editorCard.style.display = "flex";
-    editorCard.style.flexDirection = "column";
-    editorCard.style.gap = "8px";
-    editorCard.style.minHeight = "0";
-    editorCard.appendChild(sectionTitle("Editor"));
-
-    const editorTop = document.createElement("div");
-    editorTop.className = "dz-row";
-    editorTop.style.alignItems = "center";
-
-    const fileLabel = document.createElement("div");
-    fileLabel.style.fontFamily = "var(--ui-mono)";
-    fileLabel.style.fontSize = "12px";
-    fileLabel.style.opacity = "0.9";
-    fileLabel.textContent = studioState.current.filename;
-    studioRefs.fileLabel = fileLabel;
-
-    const btnRow = document.createElement("div");
-    btnRow.className = "dz-row";
-
-    const validateBtn = Button({ text:"Validate", variant:"secondary", onClick: async ()=>{ await validateCurrent(); } });
-    const injectBtn = Button({ text:"Inject/Enable", variant:"primary", onClick: async ()=>{
-      const ok = await validateCurrent();
-      if(!ok) return;
-      const text = getEditorText();
-      const filename = studioState.current.filename || "studio.dzs";
-      await injectScript({ filename, text });
+    const btn = Button({ text:"Open Script Studio", variant:"primary", onClick: ()=>{
+      const q = new URLSearchParams();
+      if(matchId && matchId !== "n/a") q.set("matchId", matchId);
+      if(clientId && clientId !== "n/a") q.set("clientId", clientId);
+      const url = `/public/dzs_studio.html${q.toString() ? "?" + q.toString() : ""}`;
+      window.open(url, "_blank", "noopener");
     }});
-    injectBtn.disabled = !isHost();
-    const downloadBtn = Button({ text:"Download .dzs", variant:"secondary", onClick: ()=>{
-      const text = getEditorText();
-      const blob = new Blob([text], { type:"text/plain" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = studioState.current.filename || "script.dzs";
-      a.click();
-      setTimeout(()=> URL.revokeObjectURL(a.href), 0);
-    }});
-    const importBtn = Button({ text:"Import .dzs", variant:"secondary", onClick: ()=>fileInput.click() });
 
-    btnRow.appendChild(validateBtn);
-    btnRow.appendChild(injectBtn);
-    btnRow.appendChild(downloadBtn);
-    btnRow.appendChild(importBtn);
-
-    const statusLine = document.createElement("div");
-    statusLine.className = "dz-help";
-    studioRefs.statusLine = statusLine;
-
-    const fileInput = document.createElement("input");
-    fileInput.type = "file";
-    fileInput.accept = ".dzs";
-    fileInput.style.display = "none";
-    fileInput.addEventListener("change", ()=>{
-      const file = fileInput.files?.[0];
-      if(!file) return;
-      const reader = new FileReader();
-      reader.onload = ()=>{
-        setEditorText(String(reader.result || ""), file.name || "imported.dzs");
-        studioLog(`Imported: ${file.name || "file"}`);
-      };
-      reader.readAsText(file);
-    });
-
-    editorTop.appendChild(fileLabel);
-    editorTop.appendChild(document.createElement("div")).className = "dz-spacer";
-    editorTop.appendChild(btnRow);
-
-    const editorHost = document.createElement("div");
-    editorHost.style.flex = "1";
-    editorHost.style.minHeight = "0";
-    editorHost.style.position = "relative";
-
-    const loading = document.createElement("div");
-    loading.className = "dz-help";
-    loading.style.position = "absolute";
-    loading.style.inset = "10px";
-    loading.style.display = "flex";
-    loading.style.alignItems = "center";
-    loading.style.justifyContent = "center";
-    loading.textContent = "Loading Monaco editor...";
-    editorHost.appendChild(loading);
-
-    if(!studioEditorEl){
-      studioEditorEl = document.createElement("div");
-      studioEditorEl.style.position = "absolute";
-      studioEditorEl.style.inset = "0";
-    }
-    editorHost.appendChild(studioEditorEl);
-
-    loadMonaco().then((monaco)=>{
-      registerDzsLanguage(monaco, engine?.ctx?.scripts?.dzs?.builtinDocs || []);
-      if(!studioModel){
-        studioModel = monaco.editor.createModel(studioState.current.text, MONACO_LANG);
-        studioModel.onDidChangeContent(()=>{
-          studioState.current.text = studioModel.getValue();
-        });
-      }
-      if(!studioEditor){
-        studioEditor = monaco.editor.create(studioEditorEl, {
-          model: studioModel,
-          theme: "vs-dark",
-          minimap: { enabled: false },
-          fontSize: 13,
-          wordWrap: "on",
-          automaticLayout: true,
-        });
-      } else {
-        studioEditor.layout();
-      }
-      loading.remove();
-    }).catch((err)=>{
-      loading.textContent = `Monaco load failed: ${err?.message || err}`;
-    });
-
-    editorCard.appendChild(editorTop);
-    editorCard.appendChild(statusLine);
-    editorCard.appendChild(editorHost);
-    editorCard.appendChild(fileInput);
-
-    const installedCard = mkCard();
-    installedCard.style.display = "flex";
-    installedCard.style.flexDirection = "column";
-    installedCard.style.gap = "8px";
-    installedCard.style.minHeight = "0";
-    installedCard.appendChild(sectionTitle("Installed"));
-
-    const installedList = document.createElement("div");
-    installedList.style.flex = "1";
-    installedList.style.minHeight = "0";
-    installedList.style.overflow = "auto";
-    installedList.style.display = "flex";
-    installedList.style.flexDirection = "column";
-    installedList.style.gap = "8px";
-    studioRefs.installedList = installedList;
-
-    installedCard.appendChild(installedList);
-
-    const bottom = mkCard();
-    bottom.style.display = "grid";
-    bottom.style.gridTemplateColumns = "1fr 1fr";
-    bottom.style.gap = "10px";
-    bottom.style.minHeight = "0";
-
-    const problemsWrap = document.createElement("div");
-    problemsWrap.style.display = "flex";
-    problemsWrap.style.flexDirection = "column";
-    problemsWrap.style.gap = "6px";
-    problemsWrap.appendChild(sectionTitle("Problems"));
-    const problemsList = document.createElement("div");
-    problemsList.style.flex = "1";
-    problemsList.style.minHeight = "0";
-    problemsList.style.overflow = "auto";
-    studioRefs.problemsList = problemsList;
-    problemsWrap.appendChild(problemsList);
-
-    const outputWrap = document.createElement("div");
-    outputWrap.style.display = "flex";
-    outputWrap.style.flexDirection = "column";
-    outputWrap.style.gap = "6px";
-    outputWrap.appendChild(sectionTitle("Output"));
-    const outputList = document.createElement("div");
-    outputList.style.flex = "1";
-    outputList.style.minHeight = "0";
-    outputList.style.overflow = "auto";
-    studioRefs.outputList = outputList;
-    outputWrap.appendChild(outputList);
-
-    bottom.appendChild(problemsWrap);
-    bottom.appendChild(outputWrap);
-
-    main.appendChild(libraryCard);
-    main.appendChild(editorCard);
-    main.appendChild(installedCard);
-
-    studioWrap.appendChild(main);
-    studioWrap.appendChild(bottom);
-
-    scroll.appendChild(studioWrap);
-
-    updateStudioStatus();
-    renderStudioProblems();
-    renderStudioOutput();
-    renderStudioLibrary();
-    renderStudioInstalled();
-    refreshLibrary();
-    refreshInstalled();
+    card.appendChild(info);
+    card.appendChild(meta);
+    card.appendChild(btn);
+    scroll.appendChild(card);
   }
 
   function renderRight(){
@@ -1285,6 +1112,7 @@ export function DzsDevScreen({ engine, onClose }){
     else if(active === "entities") renderEntities();
     else if(active === "clients") renderClients();
     else if(active === "servermaster") renderServerMaster();
+    else if(active === "mapeditor") renderMapEditor();
     else if(active === "studio") renderStudio();
     else renderDzs();
   }

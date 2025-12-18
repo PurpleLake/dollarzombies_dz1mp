@@ -7,6 +7,7 @@ import path from "path";
 import url from "url";
 import { MatchManager } from "./MatchManager.js";
 import { DzsRuntime } from "./engine/core/dzs/runtime/DzsRuntime.js";
+import { BUILTIN_DOCS } from "./engine/core/dzs/builtins/dzsBuiltins.js";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
@@ -194,6 +195,23 @@ const server = http.createServer((req, res) => {
 
     if(pathname === "/api/dzs/library" && req.method === "GET"){
       sendJson(res, 200, { ok: true, scripts: buildLibraryList() });
+      return;
+    }
+
+    if(pathname === "/api/dzs/builtins" && req.method === "GET"){
+      sendJson(res, 200, { ok: true, builtins: BUILTIN_DOCS || [] });
+      return;
+    }
+
+    if(pathname === "/api/dzs/status" && req.method === "GET"){
+      const matchId = getReqMatchId(req, null, u);
+      const match = matchId ? matchManager.getMatch(matchId) : null;
+      sendJson(res, 200, {
+        ok: true,
+        matchId: matchId || null,
+        status: match?.status || null,
+        hostPlayerId: match?.hostPlayerId || null,
+      });
       return;
     }
 
