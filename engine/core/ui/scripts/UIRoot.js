@@ -63,7 +63,25 @@ export class UIRoot {
           radial-gradient(circle at 15% 18%, rgba(106,132,74,0.22), transparent 42%),
           radial-gradient(circle at 78% 70%, rgba(168,120,55,0.16), transparent 48%),
           rgba(6,8,7,0.94);
+        background-size: cover;
+        background-position: center;
         pointer-events:auto;
+      }
+      #ui-root[data-ui-mode="mp"] .dz-screen{
+        background:
+          repeating-linear-gradient(90deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 140px),
+          repeating-linear-gradient(0deg, rgba(255,255,255,0.028) 0 1px, transparent 1px 120px),
+          repeating-linear-gradient(135deg, rgba(255,255,255,0.02) 0 1px, transparent 1px 8px),
+          radial-gradient(circle at 15% 20%, rgba(120,160,90,0.22), transparent 45%),
+          linear-gradient(180deg, rgba(6,8,6,0.88), rgba(7,9,7,0.96));
+      }
+      #ui-root[data-ui-mode="zm"] .dz-screen{
+        background:
+          repeating-linear-gradient(90deg, rgba(255,255,255,0.03) 0 1px, transparent 1px 160px),
+          repeating-linear-gradient(0deg, rgba(255,255,255,0.024) 0 1px, transparent 1px 130px),
+          repeating-linear-gradient(135deg, rgba(255,255,255,0.018) 0 1px, transparent 1px 9px),
+          radial-gradient(circle at 20% 30%, rgba(150,70,60,0.22), transparent 48%),
+          linear-gradient(180deg, rgba(6,6,7,0.88), rgba(9,7,7,0.96));
       }
 
       .dz-panel{

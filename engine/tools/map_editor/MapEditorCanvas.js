@@ -70,6 +70,7 @@ export class MapEditorCanvas {
     this.pan = { x: 0, y: 0 };
     this.zoom = 12;
     this.drag = null;
+    this.asset = null;
     this._raf = null;
 
     this._onResize = ()=> this.resize();
@@ -86,6 +87,10 @@ export class MapEditorCanvas {
 
   setTool(tool){
     this.tool = tool;
+  }
+
+  setAsset(asset){
+    this.asset = asset || null;
   }
 
   setSnap(enabled){
@@ -433,12 +438,13 @@ export class MapEditorCanvas {
     const item = this.makePointItem(this.tool, pos);
     if(item){
       this.onMutate((draft)=>{
-        if(this.tool === "prop") draft.props.push(item);
+        if(this.tool === "prop" || this.tool === "asset") draft.props.push(item);
         else if(this.tool === "player") draft.spawns.player.push(item);
         else if(this.tool === "zombie") draft.spawns.zombie.push(item);
         else if(this.tool === "light") draft.lights.push(item);
       }, { commit:true });
-      this.onSelect?.({ type:this.tool, id:item.id });
+      const selType = this.tool === "asset" ? "prop" : this.tool;
+      this.onSelect?.({ type:selType, id:item.id });
     }
   }
 
@@ -449,17 +455,35 @@ export class MapEditorCanvas {
       y: snap ? snapValue(pos.y, this.grid) : pos.y,
     };
     const id = `${tool[0]}${Date.now()}`;
-    if(tool === "prop"){
-      return { id, type:"crate", x:p.x, y:p.y, rot:0, scale:1 };
+    if(tool === "prop" || tool === "asset"){
+      const a = this.asset;
+      if(a && tool === "asset"){
+        return {
+          id,
+          type: a.id,
+          assetId: a.id,
+          kind: a.kind,
+          model: a.model,
+          material: a.material,
+          collision: a.collision,
+          collider: a.collider,
+          x: p.x,
+          y: p.y,
+          z: 0,
+          rot: 0,
+          scale: Number(a.scale || 1),
+        };
+      }
+      return { id, type:"crate", x:p.x, y:p.y, z:0, rot:0, scale:1 };
     }
     if(tool === "player"){
-      return { id, x:p.x, y:p.y, rot:0, team:"A" };
+      return { id, x:p.x, y:p.y, z:0, rot:0, team:"A" };
     }
     if(tool === "zombie"){
-      return { id, x:p.x, y:p.y };
+      return { id, x:p.x, y:p.y, z:0 };
     }
     if(tool === "light"){
-      return { id, kind:"point", x:p.x, y:p.y, z:4, intensity:1, color:"#ffffff" };
+      return { id, kind:"point", x:p.x, y:p.y, z:4, intensity:1, range:40, color:"#ffffff" };
     }
     return null;
   }

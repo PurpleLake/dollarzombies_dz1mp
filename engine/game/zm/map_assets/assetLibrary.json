@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "mode": "zm",
+  "assets": [
+    {
+      "id": "crate_rusted",
+      "name": "Rusted Crate",
+      "kind": "box",
+      "scale": 1,
+      "material": { "color": "#6b4b2f" },
+      "collision": true,
+      "collider": { "type": "box", "sx": 1, "sy": 1, "sz": 1 }
+    },
+    {
+      "id": "barrel_fuel",
+      "name": "Fuel Barrel",
+      "kind": "cylinder",
+      "scale": 1,
+      "material": { "color": "#6a2f2f" },
+      "collision": true,
+      "collider": { "type": "cylinder", "rTop": 0.45, "rBottom": 0.45, "h": 1 }
+    },
+    {
+      "id": "stone_block",
+      "name": "Stone Block",
+      "kind": "box",
+      "scale": 1,
+      "material": { "color": "#4f5258" },
+      "collision": true,
+      "collider": { "type": "box", "sx": 1.8, "sy": 0.9, "sz": 0.8 }
+    },
+    {
+      "id": "metal_door",
+      "name": "Metal Door",
+      "kind": "box",
+      "scale": 1,
+      "material": { "color": "#3d4047" },
+      "collision": true,
+      "collider": { "type": "box", "sx": 1.2, "sy": 2.2, "sz": 0.15 }
+    },
+    {
+      "id": "dead_bush",
+      "name": "Dead Bush",
+      "kind": "sphere",
+      "scale": 1,
+      "material": { "color": "#3b4a33" },
+      "collision": false
+    }
+  ]
+}

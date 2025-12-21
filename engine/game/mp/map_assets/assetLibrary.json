@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "mode": "mp",
+  "assets": [
+    {
+      "id": "crate_wood",
+      "name": "Wood Crate",
+      "kind": "box",
+      "scale": 1,
+      "material": { "color": "#8a5a32" },
+      "collision": true,
+      "collider": { "type": "box", "sx": 1, "sy": 1, "sz": 1 }
+    },
+    {
+      "id": "barrel_metal",
+      "name": "Metal Barrel",
+      "kind": "cylinder",
+      "scale": 1,
+      "material": { "color": "#5b6672" },
+      "collision": true,
+      "collider": { "type": "cylinder", "rTop": 0.45, "rBottom": 0.45, "h": 1 }
+    },
+    {
+      "id": "concrete_block",
+      "name": "Concrete Block",
+      "kind": "box",
+      "scale": 1,
+      "material": { "color": "#6a6f73" },
+      "collision": true,
+      "collider": { "type": "box", "sx": 1.6, "sy": 0.8, "sz": 0.6 }
+    },
+    {
+      "id": "fence_segment",
+      "name": "Fence Segment",
+      "kind": "box",
+      "scale": 1,
+      "material": { "color": "#3f4b56" },
+      "collision": true,
+      "collider": { "type": "box", "sx": 2.4, "sy": 1.2, "sz": 0.2 }
+    },
+    {
+      "id": "bush_small",
+      "name": "Small Bush",
+      "kind": "sphere",
+      "scale": 1,
+      "material": { "color": "#355c3d" },
+      "collision": false
+    }
+  ]
+}

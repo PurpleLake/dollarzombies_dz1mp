@@ -44,8 +44,13 @@ export class NotificationManager {
 
   notifyAll(text, opts){
     const players = this.engine?.ctx?.players || [];
-    for(const p of players){
-      this.notify(p, text, opts);
+    if(players.length){
+      for(const p of players){
+        this.notify(p, text, opts);
+      }
+      return;
     }
+    const fallback = this.engine?.ctx?.player || this.engine?.ctx?.net?.clientId || "p0";
+    this.notify(fallback, text, opts);
   }
 }

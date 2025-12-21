@@ -3,6 +3,10 @@ import { WeaponController } from "../../../../core/weapons/scripts/WeaponControl
 import { ViewModel } from "../../../../core/weapons/scripts/ViewModel.js";
 import { jitterDirection } from "../../../../core/weapons/utilities/WeaponMath.js";
 
+function degToRad(d){
+  return (Number(d || 0) * Math.PI) / 180;
+}
+
 export class PlayersModule {
   constructor({ engine, renderer, input }){
     this.engine = engine;
@@ -19,6 +23,7 @@ export class PlayersModule {
     this.hp = 100;
     this._shootCooldown = 0;
     this._lastVmWeapon = null;
+    this.damageScale = 2.5;
 
     // camera rig for FPS look
     this.camPivot = new THREE.Object3D();
@@ -49,6 +54,9 @@ export class PlayersModule {
     this.weaponCtl.setWeaponByIndex(0);
     this.weaponDef = this.weaponCtl.weaponDef;
     this.weapon = this.weaponCtl.weapon;
+    this.viewModel = new ViewModel({ renderer: this.r, camera: this.r.camera });
+    this._lastVmWeapon = null;
+    if(this.weaponDef) this.viewModel.setWeapon(this.weaponDef);
 
     // mouse wheel weapon cycling
     this._onWheel = (e)=>{
@@ -57,6 +65,10 @@ export class PlayersModule {
       else this.weaponCtl.prev();
       this.weaponDef = this.weaponCtl.weaponDef;
       this.weapon = this.weaponCtl.weapon;
+      if(this.weaponDef?.id && this.weaponDef.id !== this._lastVmWeapon){
+        this._lastVmWeapon = this.weaponDef.id;
+        this.viewModel?.setWeapon?.(this.weaponDef);
+      }
     };
     window.addEventListener("wheel", this._onWheel, { passive:true });
 
@@ -106,9 +118,15 @@ export class PlayersModule {
     if(this.input.isDown("Digit2")) this.weaponCtl.setWeaponByIndex(1);
     this.weaponDef = this.weaponCtl.weaponDef;
     this.weapon = this.weaponCtl.weapon;
+    if(this.weaponDef?.id && this.weaponDef.id !== this._lastVmWeapon){
+      this._lastVmWeapon = this.weaponDef.id;
+      this.viewModel?.setWeapon?.(this.weaponDef);
+    }
 
     // reload
-    if(this.input.isDown("KeyR")) this.weaponCtl.requestReload();
+    if(this.input.isDown("KeyR")){
+      if(this.weaponCtl.requestReload()) this.viewModel?.triggerReload?.();
+    }
     this.weaponCtl.tick(dt);
 
     // movement
@@ -121,11 +139,15 @@ export class PlayersModule {
       dir.normalize();
       dir.applyAxisAngle(new THREE.Vector3(0,1,0), this.yaw);
       const sp = this.speed * (sprint ? this.sprintMul : 1);
-      this.camPivot.position.addScaledVector(dir, sp * dt);
+      const next = this.camPivot.position.clone().addScaledVector(dir, sp * dt);
+      if(!this._collides(next.x, next.z)){
+        this.camPivot.position.copy(next);
+      }
     }
 
     // cooldown
     this._shootCooldown = Math.max(0, this._shootCooldown - dt);
+    this.viewModel?.tick?.(dt, this.input);
   }
 
   tryShoot(){
@@ -142,6 +164,7 @@ export class PlayersModule {
     const spb = 60 / Math.max(60, this.weaponDef.rpm); // seconds per bullet
     this._shootCooldown = spb;
     this.weapon.clip -= 1;
+    this.viewModel?.triggerFire?.();
 
     this.engine.events.emit("zm:weaponFired", { player: this, weaponId: this.weaponDef.id, weapon: this.weaponDef });
 
@@ -181,12 +204,43 @@ export class PlayersModule {
     return didHit;
   }
 
+  _collides(x, z, radius=0.35){
+    const cols = this.engine?.ctx?.map?.colliders || [];
+    for(const c of cols){
+      const type = String(c.type || "box");
+      if(type === "sphere"){
+        const dx = x - Number(c.x || 0);
+        const dz = z - Number(c.z || 0);
+        const r = Number(c.r || 0.5) + radius;
+        if((dx*dx + dz*dz) <= r*r) return true;
+      } else if(type === "cylinder"){
+        const dx = x - Number(c.x || 0);
+        const dz = z - Number(c.z || 0);
+        const r = Number(c.rTop || c.rBottom || 0.5) + radius;
+        if((dx*dx + dz*dz) <= r*r) return true;
+      } else {
+        const rot = degToRad(c.rot || 0);
+        const dx = x - Number(c.x || 0);
+        const dz = z - Number(c.z || 0);
+        const cos = Math.cos(-rot);
+        const sin = Math.sin(-rot);
+        const rx = dx * cos - dz * sin;
+        const rz = dx * sin + dz * cos;
+        const halfX = Math.abs(Number(c.sx || 1)) / 2;
+        const halfZ = Math.abs(Number(c.sz || 1)) / 2;
+        if(Math.abs(rx) <= halfX + radius && Math.abs(rz) <= halfZ + radius) return true;
+      }
+    }
+    return false;
+  }
+
   _damageForDistance(def, dist){
     const r = Math.max(1, def.range);
-    if(dist <= r) return def.damage;
+    if(dist <= r) return def.damage * this.damageScale;
     const minD = def.damage * (1 - Math.max(0, Math.min(1, def.dropoff)));
     const extra = Math.min(1, (dist - r) / r);
-    return Math.max(minD, def.damage * (1 - extra * def.dropoff));
+    const base = Math.max(minD, def.damage * (1 - extra * def.dropoff));
+    return base * this.damageScale;
   }
 
   dispose(){

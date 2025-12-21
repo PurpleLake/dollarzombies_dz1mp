@@ -16,9 +16,11 @@ export class Engine {
     this.loop = new Loop({
       tickHz: 60,
       onTick: (dt)=>{
-        this.ctx.time.t += dt;
-        this.ecs.tick(dt, this.ctx);
-        this.events.emit("engine:tick", { dt, t: this.ctx.time.t });
+        const scale = Number(this.ctx.timeScale ?? 1);
+        const scaled = dt * (Number.isFinite(scale) ? scale : 1);
+        this.ctx.time.t += scaled;
+        this.ecs.tick(scaled, this.ctx);
+        this.events.emit("engine:tick", { dt: scaled, t: this.ctx.time.t });
       }
     });
   }

@@ -4,15 +4,15 @@
 }
 
 .dzme-panel{
-  width: min(1400px, 96vw);
-  height: min(88vh, 900px);
-  margin: 4vh auto 0 auto;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
   display: grid;
   grid-template-rows: auto 1fr auto;
   gap: 12px;
   background: rgba(10, 14, 20, 0.75);
   border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 16px;
+  border-radius: 0;
   padding: 14px;
   box-sizing: border-box;
 }
@@ -91,6 +91,21 @@
   border-color: rgba(255,200,120,0.4);
 }
 
+.dzme-fullscreen .dzme-header,
+.dzme-fullscreen .dzme-footer,
+.dzme-fullscreen .dzme-left,
+.dzme-fullscreen .dzme-right{
+  display: none;
+}
+
+.dzme-fullscreen .dzme-body{
+  grid-template-columns: 1fr;
+}
+
+.dzme-fullscreen .dzme-center{
+  border-radius: 0;
+}
+
 .dzme-view-body{
   flex: 1;
   min-height: 0;
@@ -157,12 +172,40 @@
   overflow: hidden;
 }
 
+.dzme-card-header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .dzme-card-title{
   font-weight: 800;
   font-size: 12px;
   text-transform: uppercase;
   opacity: 0.8;
-  margin-bottom: 8px;
+  margin: 0;
+}
+
+.dzme-card-toggle{
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  color: inherit;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.dzme-card-body{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.dzme-card.is-collapsed .dzme-card-body{
+  display: none;
 }
 
 .dzme-tool-list{

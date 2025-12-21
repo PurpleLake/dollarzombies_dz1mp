@@ -87,7 +87,7 @@ export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode,
 
   const grid = document.createElement("div");
   grid.style.display="grid";
-  grid.style.gridTemplateColumns="1fr 1fr";
+  grid.style.gridTemplateColumns="repeat(auto-fit, minmax(220px, 1fr))";
   grid.style.gap="10px";
   grid.style.marginTop="10px";
 
@@ -99,6 +99,14 @@ export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode,
     onPick: ()=>onMode?.("zm"),
   });
 
+  const zmSolo = modeCard({
+    title:"Zombies (Solo)",
+    desc:"Single player. Same waves and weapons, no matchmaking.",
+    imgA:"/public/assets/modes/zm.png",
+    imgB:"/public/assets/modes/zm_hover.png",
+    onPick: ()=>onMode?.("zm_solo"),
+  });
+
   const mp = modeCard({
     title:"Multiplayer (6v6)",
     desc:"Prototype netcode + player sync. Team support scaffolding.",
@@ -108,12 +116,16 @@ export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode,
   });
 
   grid.appendChild(zm);
+  grid.appendChild(zmSolo);
   grid.appendChild(mp);
 
   const row = document.createElement("div");
   row.className = "dz-row";
   row.style.marginTop="10px";
-  row.appendChild(Button({ text: (mode==="mp" ? "Start Multiplayer" : "Start Zombies"), onClick: ()=>onPlay?.() }));
+  const startLabel = mode === "mp"
+    ? "Start Multiplayer"
+    : (mode === "zm_solo" ? "Start Solo Zombies" : "Start Zombies");
+  row.appendChild(Button({ text: startLabel, onClick: ()=>onPlay?.() }));
   row.appendChild(Button({ text:"Loadout", variant:"secondary", onClick: ()=>onClass?.() }));
   row.appendChild(Button({ text:"Settings", variant:"secondary", onClick: ()=>onSettings?.() }));
   if(onBrowser){

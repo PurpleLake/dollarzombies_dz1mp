@@ -1,0 +1,3 @@
+on zm:weaponFired {
+  iPrintLnBoldAll "^1Weapon fired"
+}

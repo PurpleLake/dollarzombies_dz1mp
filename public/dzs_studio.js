@@ -20,6 +20,16 @@ const els = {
 };
 
 const channel = new BroadcastChannel("dzs-studio");
+channel.onmessage = (ev)=>{
+  const data = ev?.data || {};
+  if(data.t === "dzs:installedList"){
+    state.installed = Array.isArray(data.scripts) ? data.scripts : [];
+    renderInstalled();
+    updateStatus();
+  } else if(data.t === "dzs:install" || data.t === "dzs:disable" || data.t === "dzs:remove"){
+    fetchInstalled();
+  }
+};
 const state = {
   library: [],
   installed: [],

@@ -14,6 +14,35 @@ export class DzsScriptManager {
     return Array.from(this._scripts.values()).map(s=>({ ...s }));
   }
 
+  listAll(){
+    const out = new Map();
+    for(const record of this._scripts.values()){
+      out.set(record.scriptId, { ...record });
+    }
+    const runtimeScripts = this.runtime?._scripts;
+    if(runtimeScripts && typeof runtimeScripts[Symbol.iterator] === "function"){
+      for(const entry of runtimeScripts){
+        const scriptId = String(entry || "");
+        if(!scriptId) continue;
+        if(out.has(scriptId)){
+          const rec = out.get(scriptId);
+          rec.loaded = true;
+          if(rec.enabled == null) rec.enabled = true;
+        } else {
+          out.set(scriptId, {
+            scriptId,
+            filename: scriptId,
+            name: scriptId,
+            enabled: true,
+            loaded: true,
+            source: "runtime",
+          });
+        }
+      }
+    }
+    return Array.from(out.values());
+  }
+
   installDzs({ filename="(dzs)", text="", ownerId=null, scriptId=null } = {}){
     const resolvedId = scriptId ? String(scriptId) : `studio_${this._seq++}`;
     const record = {
@@ -41,6 +70,17 @@ export class DzsScriptManager {
     record.enabled = true;
     record.lastEnabledAt = Date.now();
     return true;
+  }
+
+  reenableAll(){
+    if(!this.runtime?.loadText) return 0;
+    let count = 0;
+    for(const record of this._scripts.values()){
+      if(!record.enabled) continue;
+      this.runtime.loadText(record.text, record.filename, record.scriptId);
+      count += 1;
+    }
+    return count;
   }
 
   disable(scriptId){

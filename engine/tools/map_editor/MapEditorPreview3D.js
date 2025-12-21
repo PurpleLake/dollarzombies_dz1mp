@@ -8,6 +8,11 @@ function clamp(v, min, max){
   return Math.max(min, Math.min(max, v));
 }
 
+function toNumber(n, fallback=0){
+  const v = Number(n);
+  return Number.isFinite(v) ? v : fallback;
+}
+
 function disposeObject(obj){
   if(obj.geometry) obj.geometry.dispose?.();
   if(obj.material){
@@ -20,9 +25,14 @@ function disposeObject(obj){
 }
 
 export class MapEditorPreview3D {
-  constructor({ container, getState }){
+  constructor({ container, getState, getTool, getSelectedAsset, onPlace, onSelect, onMove }){
     this.container = container;
     this.getState = getState;
+    this.getTool = getTool;
+    this.getSelectedAsset = getSelectedAsset;
+    this.onPlace = onPlace;
+    this.onSelect = onSelect;
+    this.onMove = onMove;
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0b0f16);
     this.renderer = new THREE.WebGLRenderer({ antialias:true });
@@ -48,6 +58,11 @@ export class MapEditorPreview3D {
 
     this.mapGroup = new THREE.Group();
     this.scene.add(this.mapGroup);
+    this.raycaster = new THREE.Raycaster();
+    this.pointer = new THREE.Vector2();
+    this._ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    this._drag = null;
+    this._selectables = [];
 
     this._onResize = ()=> this.resize();
     window.addEventListener("resize", this._onResize);
@@ -72,12 +87,43 @@ export class MapEditorPreview3D {
     const el = this.renderer.domElement;
     this._onMouseDown = (e)=>{
       if(e.button !== 0) return;
+      const tool = this.getTool?.() || "select";
+      const hit = this._pick(e);
+      if(tool === "select"){
+        if(hit?.selectable){
+          this.onSelect?.(hit.selectable);
+          if(hit.selectable.type === "prop"){
+            this._drag = { sel: hit.selectable };
+          }
+        } else {
+          this.onSelect?.(null);
+        }
+        this.controls.dragging = true;
+        this.controls.lastX = e.clientX;
+        this.controls.lastY = e.clientY;
+        return;
+      }
+
+      if(tool === "prop" || tool === "asset"){
+        const asset = this.getSelectedAsset?.();
+        const point = this._pickGround(e);
+        if(point && asset){
+          this.onPlace?.({ x: point.x, y: point.z, z: 0, asset });
+        }
+      }
       this.controls.dragging = true;
       this.controls.lastX = e.clientX;
       this.controls.lastY = e.clientY;
     };
     this._onMouseMove = (e)=>{
       if(!this.controls.dragging) return;
+      if(this._drag){
+        const point = this._pickGround(e);
+        if(point){
+          this.onMove?.(this._drag.sel, { x: point.x, y: point.z });
+        }
+        return;
+      }
       const dx = e.clientX - this.controls.lastX;
       const dy = e.clientY - this.controls.lastY;
       this.controls.lastX = e.clientX;
@@ -87,7 +133,10 @@ export class MapEditorPreview3D {
       this._updateCamera();
       this.render();
     };
-    this._onMouseUp = ()=>{ this.controls.dragging = false; };
+    this._onMouseUp = ()=>{
+      this.controls.dragging = false;
+      this._drag = null;
+    };
     this._onWheel = (e)=>{
       e.preventDefault();
       const dir = e.deltaY > 0 ? 1 : -1;
@@ -137,19 +186,48 @@ export class MapEditorPreview3D {
     this._rebuild();
   }
 
+  _updatePointer(e){
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  }
+
+  _pickGround(e){
+    this._updatePointer(e);
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const hit = new THREE.Vector3();
+    const ok = this.raycaster.ray.intersectPlane(this._ground, hit);
+    return ok ? hit : null;
+  }
+
+  _pick(e){
+    this._updatePointer(e);
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const hits = this.raycaster.intersectObjects(this._selectables, true);
+    if(!hits?.length) return null;
+    let obj = hits[0].object;
+    while(obj && !obj.userData?.selectable) obj = obj.parent;
+    return obj?.userData?.selectable ? { selectable: obj.userData.selectable } : null;
+  }
+
   _rebuild(){
     const { mapData, selected } = this.getState();
     for(const child of Array.from(this.mapGroup.children)){
       disposeObject(child);
       this.mapGroup.remove(child);
     }
+    this._selectables = [];
     if(!mapData) return;
 
     const bounds = mapData.bounds || { minX:-25, minY:-25, maxX:25, maxY:25 };
-    const width = Math.abs(bounds.maxX - bounds.minX);
-    const depth = Math.abs(bounds.maxY - bounds.minY);
-    const centerX = (bounds.minX + bounds.maxX) / 2;
-    const centerZ = (bounds.minY + bounds.maxY) / 2;
+    const minX = toNumber(bounds.minX, -25);
+    const minY = toNumber(bounds.minY, -25);
+    const maxX = toNumber(bounds.maxX, 25);
+    const maxY = toNumber(bounds.maxY, 25);
+    const width = Math.max(1, Math.abs(maxX - minX));
+    const depth = Math.max(1, Math.abs(maxY - minY));
+    const centerX = (minX + maxX) / 2;
+    const centerZ = (minY + maxY) / 2;
     this.controls.target.set(centerX, 0, centerZ);
 
     const floorGeo = new THREE.PlaneGeometry(width || 1, depth || 1);
@@ -168,25 +246,35 @@ export class MapEditorPreview3D {
     const wallMat = new THREE.MeshStandardMaterial({ color: 0x5b7ca6, roughness: 0.8 });
     const wallSelMat = new THREE.MeshStandardMaterial({ color: 0xf2b26b, roughness: 0.7 });
     for(const w of (mapData.walls || [])){
-      const ww = Math.abs(Number(w.w || 1));
-      const hh = Math.abs(Number(w.h || 1));
+      const ww = Math.max(0.1, Math.abs(toNumber(w.w, 1)));
+      const hh = Math.max(0.1, Math.abs(toNumber(w.h, 1)));
       const geo = new THREE.BoxGeometry(ww, 3, hh);
       const mat = (selected?.type === "wall" && selected?.id === w.id) ? wallSelMat : wallMat;
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(Number(w.x || 0), 1.5, Number(w.y || 0));
+      mesh.position.set(toNumber(w.x, 0), 1.5, toNumber(w.y, 0));
       mesh.rotation.y = -degToRad(w.rot || 0);
+      mesh.userData.selectable = { type:"wall", id:w.id };
+      this._selectables.push(mesh);
       this.mapGroup.add(mesh);
     }
 
     const propMat = new THREE.MeshStandardMaterial({ color: 0xb08b44, roughness: 0.85 });
     const propSelMat = new THREE.MeshStandardMaterial({ color: 0xf4d27a, roughness: 0.7 });
     for(const p of (mapData.props || [])){
-      const s = Math.max(0.4, Number(p.scale || 1));
-      const geo = new THREE.BoxGeometry(s, s, s);
-      const mat = (selected?.type === "prop" && selected?.id === p.id) ? propSelMat : propMat;
+      const s = Math.max(0.4, toNumber(p.scale, 1));
+      const isSelected = (selected?.type === "prop" && selected?.id === p.id);
+      const color = isSelected ? "#f4d27a" : (p.material?.color || "#b08b44");
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85 });
+      let geo = null;
+      const kind = String(p.kind || "box");
+      if(kind === "sphere") geo = new THREE.SphereGeometry(s * 0.5, 16, 12);
+      else if(kind === "cylinder") geo = new THREE.CylinderGeometry(s * 0.35, s * 0.35, s, 12);
+      else geo = new THREE.BoxGeometry(s, s, s);
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(Number(p.x || 0), s / 2, Number(p.y || 0));
+      mesh.position.set(toNumber(p.x, 0), (s / 2) + toNumber(p.z, 0), toNumber(p.y, 0));
       mesh.rotation.y = -degToRad(p.rot || 0);
+      mesh.userData.selectable = { type:"prop", id:p.id };
+      this._selectables.push(mesh);
       this.mapGroup.add(mesh);
     }
 
@@ -196,8 +284,10 @@ export class MapEditorPreview3D {
       const geo = new THREE.ConeGeometry(0.45, 1.2, 6);
       const mat = (selected?.type === "player" && selected?.id === s.id) ? playerSelMat : playerMat;
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(Number(s.x || 0), 0.6, Number(s.y || 0));
+      mesh.position.set(toNumber(s.x, 0), 0.6 + toNumber(s.z, 0), toNumber(s.y, 0));
       mesh.rotation.y = -degToRad(s.rot || 0);
+      mesh.userData.selectable = { type:"player", id:s.id };
+      this._selectables.push(mesh);
       this.mapGroup.add(mesh);
     }
 
@@ -207,7 +297,9 @@ export class MapEditorPreview3D {
       const geo = new THREE.ConeGeometry(0.45, 1.2, 6);
       const mat = (selected?.type === "zombie" && selected?.id === s.id) ? zombieSelMat : zombieMat;
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(Number(s.x || 0), 0.6, Number(s.y || 0));
+      mesh.position.set(toNumber(s.x, 0), 0.6 + toNumber(s.z, 0), toNumber(s.y, 0));
+      mesh.userData.selectable = { type:"zombie", id:s.id };
+      this._selectables.push(mesh);
       this.mapGroup.add(mesh);
     }
 
@@ -217,21 +309,23 @@ export class MapEditorPreview3D {
       const geo = new THREE.SphereGeometry(0.3, 12, 10);
       const mat = (selected?.type === "light" && selected?.id === l.id) ? lightSelMat : lightMat;
       const mesh = new THREE.Mesh(geo, mat);
-      const z = Number(l.z || 4);
-      mesh.position.set(Number(l.x || 0), z, Number(l.y || 0));
+      const z = toNumber(l.z, 4);
+      mesh.position.set(toNumber(l.x, 0), z, toNumber(l.y, 0));
+      mesh.userData.selectable = { type:"light", id:l.id };
+      this._selectables.push(mesh);
       this.mapGroup.add(mesh);
       if(l.kind === "point"){
-        const light = new THREE.PointLight(l.color || "#ffffff", Number(l.intensity || 1), 40, 1.6);
+        const light = new THREE.PointLight(l.color || "#ffffff", toNumber(l.intensity, 1), toNumber(l.range, 40), 1.6);
         light.position.copy(mesh.position);
         this.mapGroup.add(light);
       }
       if(l.kind === "ambient"){
-        const light = new THREE.AmbientLight(l.color || "#ffffff", Number(l.intensity || 0.6));
+        const light = new THREE.AmbientLight(l.color || "#ffffff", toNumber(l.intensity, 0.6));
         this.mapGroup.add(light);
       }
       if(l.kind === "directional"){
-        const light = new THREE.DirectionalLight(l.color || "#ffffff", Number(l.intensity || 0.8));
-        light.position.set(Number(l.x || 0), z + 10, Number(l.y || 0));
+        const light = new THREE.DirectionalLight(l.color || "#ffffff", toNumber(l.intensity, 0.8));
+        light.position.set(toNumber(l.x, 0), z + 10, toNumber(l.y, 0));
         this.mapGroup.add(light);
       }
     }
@@ -239,12 +333,14 @@ export class MapEditorPreview3D {
     const zoneMat = new THREE.MeshBasicMaterial({ color: 0xd98ab5, wireframe: true });
     const zoneSelMat = new THREE.MeshBasicMaterial({ color: 0xffb7da, wireframe: true });
     for(const z of (mapData.zones || [])){
-      const ww = Math.abs(Number(z.w || 1));
-      const hh = Math.abs(Number(z.h || 1));
+      const ww = Math.max(0.1, Math.abs(toNumber(z.w, 1)));
+      const hh = Math.max(0.1, Math.abs(toNumber(z.h, 1)));
       const geo = new THREE.BoxGeometry(ww, 2, hh);
       const mat = (selected?.type === "zone" && selected?.id === z.id) ? zoneSelMat : zoneMat;
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(Number(z.x || 0), 1, Number(z.y || 0));
+      mesh.position.set(toNumber(z.x, 0), 1, toNumber(z.y, 0));
+      mesh.userData.selectable = { type:"zone", id:z.id };
+      this._selectables.push(mesh);
       this.mapGroup.add(mesh);
     }
 

@@ -49,6 +49,7 @@ function ensureMapCtx(engine, mode, name){
     mpSpawnsTeam0: [],
     mpSpawnsTeam1: [],
     zones: [],
+    colliders: [],
   };
   return engine.ctx.map;
 }
@@ -93,6 +94,7 @@ export class MapCompiler {
       maxY: bounds.maxY,
     };
     mapCtx.zones = [];
+    mapCtx.colliders = [];
 
     // Floor + bounds
     if(world?.addFloor){
@@ -112,6 +114,12 @@ export class MapCompiler {
       world.addWallBox({ width: bounds.sizeX, height: wallHeight, depth: thickness, x: cx, y: wallHeight/2, z: cy + halfY });
       world.addWallBox({ width: thickness, height: wallHeight, depth: bounds.sizeY, x: cx - halfX, y: wallHeight/2, z: cy });
       world.addWallBox({ width: thickness, height: wallHeight, depth: bounds.sizeY, x: cx + halfX, y: wallHeight/2, z: cy });
+      mapCtx.colliders.push(
+        { type:"box", x:cx, y:0, z:cy-halfY, sx:bounds.sizeX, sy:wallHeight, sz:thickness, rot:0 },
+        { type:"box", x:cx, y:0, z:cy+halfY, sx:bounds.sizeX, sy:wallHeight, sz:thickness, rot:0 },
+        { type:"box", x:cx-halfX, y:0, z:cy, sx:thickness, sy:wallHeight, sz:bounds.sizeY, rot:0 },
+        { type:"box", x:cx+halfX, y:0, z:cy, sx:thickness, sy:wallHeight, sz:bounds.sizeY, rot:0 },
+      );
     }
 
     // Walls
@@ -129,29 +137,102 @@ export class MapCompiler {
       if(mesh?.rotation){
         mesh.rotation.y = degToRad(w.rot || 0);
       }
+      mapCtx.colliders.push({
+        type: "box",
+        x: Number(w.x || 0),
+        y: 0,
+        z: Number(w.y || 0),
+        sx: Math.abs(Number(w.w || 1)),
+        sy: 2.6,
+        sz: Math.abs(Number(w.h || 1)),
+        rot: Number(w.rot || 0),
+      });
     }
 
     // Props
     const props = Array.isArray(dzmapData.props) ? dzmapData.props : [];
     for(const p of props){
       if(!isFiniteNumber(p?.x) || !isFiniteNumber(p?.y)) continue;
-      const type = String(p?.type || "crate");
-      if(world?.addCrate){
+      const scale = Number(p.scale || 1);
+      const kind = String(p.kind || (p.model ? "model" : "box"));
+      const height = (kind === "sphere") ? (scale * 0.5) : (kind === "cylinder" ? scale : scale);
+      const baseY = Number(p.z || 0);
+      const pos = { x: Number(p.x), y: baseY + height * 0.5, z: Number(p.y) };
+      const color = parseColorHex(p.material?.color, 0x6a4a2c);
+
+      if(ctx.entities?.spawnEntity){
+        if(kind === "model"){
+          ctx.entities.spawnEntity("model", pos, {
+            model: p.model,
+            scale,
+            tag: "dzmap-prop",
+          });
+        } else if(kind === "sphere"){
+          ctx.entities.spawnEntity("sphere", pos, {
+            r: scale * 0.5,
+            color,
+            tag: "dzmap-prop",
+          });
+        } else if(kind === "cylinder"){
+          ctx.entities.spawnEntity("cylinder", pos, {
+            rTop: scale * 0.35,
+            rBottom: scale * 0.35,
+            h: scale,
+            color,
+            tag: "dzmap-prop",
+          });
+        } else {
+          ctx.entities.spawnEntity("box", pos, {
+            sx: scale,
+            sy: scale,
+            sz: scale,
+            color,
+            tag: "dzmap-prop",
+          });
+        }
+      } else if(world?.addCrate){
         world.addCrate({
           x: Number(p.x),
-          y: 0.5 * (Number(p.scale || 1)),
+          y: pos.y,
           z: Number(p.y),
-          size: Number(p.scale || 1),
+          size: scale,
+          color,
         });
-        continue;
       }
-      if(ctx.entities?.spawnEntity){
-        ctx.entities.spawnEntity("box", { x:Number(p.x), y:0.5, z:Number(p.y) }, {
-          sx: Number(p.scale || 1),
-          sy: Number(p.scale || 1),
-          sz: Number(p.scale || 1),
-          tag: "dzmap-prop",
-        });
+
+      if(p.collision !== false){
+        const col = p.collider || {};
+        const colType = String(col.type || kind || "box");
+        if(colType === "sphere"){
+          mapCtx.colliders.push({
+            type: "sphere",
+            x: Number(p.x || 0),
+            y: baseY,
+            z: Number(p.y || 0),
+            r: Number(col.r || (scale * 0.5)),
+          });
+        } else if(colType === "cylinder"){
+          mapCtx.colliders.push({
+            type: "cylinder",
+            x: Number(p.x || 0),
+            y: baseY,
+            z: Number(p.y || 0),
+            rTop: Number(col.rTop || (scale * 0.35)),
+            rBottom: Number(col.rBottom || (scale * 0.35)),
+            h: Number(col.h || scale),
+          });
+        } else {
+          mapCtx.colliders.push({
+            type: "box",
+            x: Number(p.x || 0),
+            y: baseY,
+            z: Number(p.y || 0),
+            sx: Number(col.sx || scale),
+            sy: Number(col.sy || scale),
+            sz: Number(col.sz || scale),
+            rot: Number(p.rot || 0),
+          });
+        }
       }
     }
 
@@ -164,6 +245,7 @@ export class MapCompiler {
         color: parseColorHex(l.color, 0xffffff),
         intensity: toNumber(l.intensity, 1),
         position: { x:Number(l.x), y: toNumber(l.z, 4), z:Number(l.y) },
+        distance: toNumber(l.range, 40),
         castShadow: true,
       });
     }
@@ -178,7 +260,7 @@ export class MapCompiler {
       const team1 = [];
       for(const s of playerSpawns){
         if(!isFiniteNumber(s?.x) || !isFiniteNumber(s?.y)) continue;
-        const entry = { x:Number(s.x), y:1.2, z:Number(s.y), rot: toNumber(s.rot, 0) };
+        const entry = { x:Number(s.x), y: toNumber(s.z, 1.2), z:Number(s.y), rot: toNumber(s.rot, 0) };
         if(String(s.team || "").toUpperCase() === "B") team1.push(entry);
         else team0.push(entry);
       }
@@ -187,10 +269,10 @@ export class MapCompiler {
     } else {
       mapCtx.playerSpawns = playerSpawns
         .filter(s=>isFiniteNumber(s?.x) && isFiniteNumber(s?.y))
-        .map(s=>({ x:Number(s.x), y:1.2, z:Number(s.y), rot: toNumber(s.rot, 0) }));
+        .map(s=>({ x:Number(s.x), y: toNumber(s.z, 1.2), z:Number(s.y), rot: toNumber(s.rot, 0) }));
       mapCtx.zombieSpawns = zombieSpawns
         .filter(s=>isFiniteNumber(s?.x) && isFiniteNumber(s?.y))
-        .map(s=>({ x:Number(s.x), y:1.2, z:Number(s.y) }));
+        .map(s=>({ x:Number(s.x), y: toNumber(s.z, 1.2), z:Number(s.y) }));
     }
 
     // Zones (store in map ctx)

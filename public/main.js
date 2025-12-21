@@ -29,6 +29,7 @@ import { PauseMenuOverlay } from "/engine/core/ui/scripts/screens/PauseMenuOverl
 import { QueueScreen } from "/engine/core/ui/scripts/screens/QueueScreen.js";
 import { ServerBrowserScreen } from "/engine/core/ui/scripts/screens/ServerBrowserScreen.js";
 import { HudSystem } from "/engine/core/ui/scripts/HudSystem.js";
+import { ZmGameOverScreen } from "/engine/core/ui/scripts/screens/ZmGameOverScreen.js";
 import { DevModule } from "/engine/game/zm/dev/scripts/DevModule.js";
 import { zmMaps, getZmMap } from "/engine/game/zm/maps/MapRegistry.js";
 import { mpMaps, getMpMap } from "/engine/game/mp/maps/MapRegistry.js";
@@ -58,6 +59,10 @@ const uiRoot = new UIRoot();
 const theme = new ThemeManager();
 theme.apply();
 const options = new OptionsStore();
+function setUiMode(mode){
+  const next = (mode === "zm_solo") ? "zm" : (mode || "zm");
+  if(uiRoot?.el) uiRoot.el.dataset.uiMode = next;
+}
 
 // Move HUD under engine-owned HUD layer
 const hudEl = document.getElementById("hud");
@@ -122,6 +127,12 @@ engine.ctx.devModule = dev;
 engine.events.on("menu:toast", ({ msg })=> menu.toast(msg));
 
 const dzsStudioChannel = new BroadcastChannel("dzs-studio");
+function broadcastDzsInstalled(){
+  const mgr = engine?.ctx?.dzsStudio;
+  if(!mgr) return;
+  const scriptsList = mgr.listAll?.() || mgr.list?.() || [];
+  dzsStudioChannel.postMessage({ t: "dzs:installedList", scripts: scriptsList });
+}
 dzsStudioChannel.onmessage = (ev)=>{
   const data = ev?.data || {};
   const mgr = engine?.ctx?.dzsStudio;
@@ -129,12 +140,15 @@ dzsStudioChannel.onmessage = (ev)=>{
   if(data.t === "dzs:install"){
     if(!data.scriptId) return;
     mgr.installDzs?.({ scriptId: data.scriptId, filename: data.filename, text: data.text, ownerId: data.ownerId });
+    broadcastDzsInstalled();
   } else if(data.t === "dzs:disable"){
     if(!data.scriptId) return;
     mgr.disable?.(data.scriptId);
+    broadcastDzsInstalled();
   } else if(data.t === "dzs:remove"){
     if(!data.scriptId) return;
     mgr.remove?.(data.scriptId);
+    broadcastDzsInstalled();
   }
 };
 
@@ -143,6 +157,8 @@ engine.events.on("log", ({ msg }) => uiLog(msg));
 engine.events.on("zm:wave", ({ wave }) => { if(waveNum) waveNum.textContent = String(wave); });
 engine.events.on("zm:alive", ({ alive }) => { if(aliveNum) aliveNum.textContent = String(alive); });
 engine.events.on("player:hp", ({ hp }) => { if(hpNum) hpNum.textContent = String(Math.max(0, Math.floor(hp))); });
+engine.events.on("zm:zombieDeath", () => { zmStats.kills += 1; });
+engine.events.on("zm:playerDeath", () => { zmStats.downs += 1; });
 
   engine.events.on("cash:change", ({ cash })=>{ if(cashNum) cashNum.textContent = String(cash); });
 
@@ -167,6 +183,7 @@ const session = engine.ctx.session = {
   mapSelections: { zm: defaultZm.id, mp: defaultMp.id },
   mapId: initialMode === "mp" ? defaultMp.id : defaultZm.id,
 };
+setUiMode(session.mode);
 engine.ctx.net?.setMode?.(session.mode);
 
 const ClientState = Object.freeze({
@@ -182,6 +199,8 @@ const matchSession = engine.ctx.matchSession = {
   matchMode: null,
   hostPlayerId: null,
 };
+
+const zmStats = engine.ctx.zmStats = { kills: 0, downs: 0 };
 
 function uiModeToMatch(mode){
   return mode === "zm" ? "zombies" : "solo";
@@ -255,6 +274,7 @@ engine.events.on("match:found", ({ matchId, mode, hostPlayerId })=>{
   matchSession.hostPlayerId = hostPlayerId || null;
   const uiMode = matchModeToUi(mode);
   session.mode = uiMode;
+  setUiMode(session.mode);
   session.mapId = resolveMapIdForMode(uiMode);
   showLobby(uiMode);
 });
@@ -363,6 +383,8 @@ async function loadAllScripts(mode=session.mode){
   await scripts.loadAll();
   uiLog("Binding DZS handlers...");
   scripts.bindAll();
+  engine.ctx.dzsStudio?.reenableAll?.();
+  broadcastDzsInstalled();
   uiLog("Ready.");
 }
 
@@ -412,6 +434,10 @@ async function startGame(modeOverride){
     engine.ctx.net?.setMode?.(mode);
 
     destroyCurrentGame();
+    if(mode === "zm"){
+      zmStats.kills = 0;
+      zmStats.downs = 0;
+    }
     game = (mode === "mp") ? new MpGame({ engine, scripts }) : new ZmGame({ engine, scripts });
     engine.ctx.game = game;
 
@@ -441,6 +467,7 @@ async function startGame(modeOverride){
 
 
 function showSettings({ overlay=false } = {}){
+  setUiMode(session.mode);
   const node = SettingsScreen({
     menu,
     theme,
@@ -456,7 +483,8 @@ function showSettings({ overlay=false } = {}){
 }
 
 function showQueue(mode=session.mode){
-  const label = mode === "mp" ? "Solo" : "Zombies";
+  setUiMode(mode);
+  const label = mode === "mp" ? "Solo" : (mode === "zm_solo" ? "Zombies (Solo)" : "Zombies");
   const view = QueueScreen({
     modeLabel: label,
     onCancel: ()=> leaveQueueToMenu(),
@@ -469,6 +497,11 @@ function showQueue(mode=session.mode){
 
 function queueForMode(mode){
   session.mode = mode || "zm";
+  setUiMode(session.mode);
+  if(session.mode === "zm_solo"){
+    startGame("zm_solo");
+    return;
+  }
   session.mapId = resolveMapIdForMode(session.mode);
   matchSession.matchMode = uiModeToMatch(session.mode);
   matchSession.matchId = null;
@@ -498,6 +531,7 @@ function showMapSelect(mode="zm"){
   const maps = mode === "mp" ? mpMaps : zmMaps;
   const fallback = maps.find(m=>!m.disabled) || maps[0];
   session.mode = mode;
+  setUiMode(session.mode);
   let selectedId = (mode === "mp" ? session.mapSelections.mp : session.mapSelections.zm) || fallback?.id;
   if(maps.find(m=>m.id === selectedId && m.disabled)) selectedId = fallback?.id;
   session.mapId = selectedId;
@@ -528,6 +562,7 @@ function showMapSelect(mode="zm"){
 }
 
 function showServerBrowser(){
+  setUiMode(session.mode);
   const view = ServerBrowserScreen({
     servers: serverBrowserState.servers,
     showAll: serverBrowserState.showAll,
@@ -548,6 +583,7 @@ function showServerBrowser(){
 function showLobby(mode=session.mode){
   const m = mode || "zm";
   session.mode = m;
+  setUiMode(session.mode);
   session.mapId = resolveMapIdForMode(m);
   engine.ctx.net?.setMode?.(m);
   setClientState(ClientState.LOBBY);
@@ -557,6 +593,7 @@ function showLobby(mode=session.mode){
 
 function showClassSelect({ returnToLobby=false } = {}){
   const mode = session.mode || "zm";
+  setUiMode(mode);
   menu.showHud(false);
   menu.setOverlay(null);
   menu.setScreen(ClassEditorScreen({
@@ -574,6 +611,7 @@ function showClassSelect({ returnToLobby=false } = {}){
 function showMainMenu(){
   setClientState(ClientState.MENU);
   engine.ctx.net?.setMode?.("idle");
+  setUiMode(session.mode);
   menu.showHud(false);
   menu.setOverlay(null);
   menu.setScreen(MainMenuScreen({
@@ -587,6 +625,7 @@ function showMainMenu(){
 }
 
 function showPauseOverlay(){
+  setUiMode(session.mode);
   menu.setScreen(null);
   menu.setOverlay(PauseMenuOverlay({
     onResume: ()=> resumeFromPause(),
@@ -622,6 +661,25 @@ function exitToMenu(){
   showMainMenu();
 }
 
+function showZmGameOver(){
+  engine.ctx.timeScale = 0;
+  menu.showHud(false);
+  menu.setScreen(null);
+  menu.setOverlay(ZmGameOverScreen({
+    stats: {
+      money: engine.ctx.cash?.get?.("p0") ?? 0,
+      kills: zmStats.kills,
+      downs: zmStats.downs,
+    },
+    onRestart: ()=>{
+      engine.ctx.timeScale = 1;
+      menu.setOverlay(null);
+      startGame("zm");
+    },
+    onEnd: ()=> exitToMenu(),
+  }));
+}
+
 // Pause toggle (Esc)
 engine.events.on("menu:togglePause", ()=>{
   const inGame = (menu.screenEl === null); // if no full screen menu, assume in-game
@@ -629,6 +687,8 @@ engine.events.on("menu:togglePause", ()=>{
   if(engine.ctx.timeScale === 0) resumeFromPause();
   else pauseGame();
 });
+
+engine.events.on("zm:gameEnd", ()=> showZmGameOver());
 
 
 // Keep ammo UI fresh

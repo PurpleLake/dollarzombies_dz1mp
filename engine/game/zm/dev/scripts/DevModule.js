@@ -4,6 +4,7 @@ export class DevModule {
     this.engine = engine;
     this.open = false;
     this.node = null;
+    this._prevTimeScale = null;
 
     // track mouse buttons (simple)
     this.mouseDown = false;
@@ -24,6 +25,9 @@ export class DevModule {
     engine.events.on("dev:toggle", ()=>{
       this.open = !this.open;
       if(this.open){
+  this._prevTimeScale = engine.ctx.timeScale ?? 1;
+  engine.ctx.timeScale = 0;
+  if(document.pointerLockElement) document.exitPointerLock();
   const menu = engine.ctx.menu;
   if(menu){
     this.node = DzsDevScreen({
@@ -34,6 +38,7 @@ export class DevModule {
     menu.toast("Developer Menu opened");
   }
 } else {
+  if(this._prevTimeScale != null) engine.ctx.timeScale = this._prevTimeScale;
   const menu = engine.ctx.menu;
   if(menu){
     menu.setOverlay(null);

@@ -82,14 +82,14 @@ export class WorldBuilder {
     return this.addWallBox({ width:size, height:size, depth:size, x, y: y ?? size/2, z, color });
   }
 
-  addLight({ type="ambient", color=0xffffff, intensity=0.8, position=null, castShadow=true } = {}){
+  addLight({ type="ambient", color=0xffffff, intensity=0.8, position=null, castShadow=true, distance=120 } = {}){
     let light;
     if(type === "directional"){
       light = new this.THREE.DirectionalLight(color, intensity);
       light.castShadow = castShadow;
       if(position) light.position.set(position.x||0, position.y||0, position.z||0);
     } else if(type === "point"){
-      light = new this.THREE.PointLight(color, intensity, 120, 1.4);
+      light = new this.THREE.PointLight(color, intensity, Number(distance||120), 1.4);
       if(position) light.position.set(position.x||0, position.y||0, position.z||0);
       light.castShadow = castShadow;
     } else {

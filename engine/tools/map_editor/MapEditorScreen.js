@@ -103,6 +103,47 @@ function makeSelect({ label, value, options, onChange }){
   return wrap;
 }
 
+function makeCheckbox({ label, checked=false, onChange }){
+  const wrap = document.createElement("label");
+  wrap.className = "dzme-toggle";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.checked = Boolean(checked);
+  const text = document.createElement("span");
+  text.textContent = label;
+  input.addEventListener("change", ()=> onChange?.(input.checked));
+  wrap.appendChild(input);
+  wrap.appendChild(text);
+  return wrap;
+}
+
+function makeCard(title){
+  const wrap = document.createElement("div");
+  wrap.className = "dzme-card";
+  const header = document.createElement("div");
+  header.className = "dzme-card-header";
+  const t = document.createElement("div");
+  t.className = "dzme-card-title";
+  t.textContent = title;
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "dzme-card-toggle";
+  toggle.textContent = "Hide";
+  header.appendChild(t);
+  header.appendChild(toggle);
+  const body = document.createElement("div");
+  body.className = "dzme-card-body";
+  wrap.appendChild(header);
+  wrap.appendChild(body);
+  let open = true;
+  toggle.addEventListener("click", ()=>{
+    open = !open;
+    wrap.classList.toggle("is-collapsed", !open);
+    toggle.textContent = open ? "Hide" : "Show";
+  });
+  return { wrap, body };
+}
+
 export function MapEditorScreen({ engine, onClose }){
   ensureCss();
   const menu = engine?.ctx?.menu;
@@ -115,6 +156,9 @@ export function MapEditorScreen({ engine, onClose }){
   let testing = false;
   let testSession = null;
   let viewMode = "split";
+  let assets = [];
+  let selectedAsset = null;
+  let assetMode = engine?.ctx?.session?.mode || "zm";
 
   const stored = localStorage.getItem(WORKSPACE_KEY);
   const parsed = stored ? safeParse(stored) : null;
@@ -181,6 +225,20 @@ export function MapEditorScreen({ engine, onClose }){
   viewHeader.appendChild(viewTitle);
   viewHeader.appendChild(viewTabs);
 
+  const viewActions = document.createElement("div");
+  viewActions.className = "dzme-view-tabs";
+  const fullscreenBtn = document.createElement("button");
+  fullscreenBtn.type = "button";
+  fullscreenBtn.className = "dzme-view-tab";
+  fullscreenBtn.textContent = "Fullscreen 3D";
+  fullscreenBtn.addEventListener("click", ()=>{
+    screen.classList.toggle("dzme-fullscreen");
+    setViewMode("3d");
+    setTimeout(()=> preview3d.resize(), 50);
+  });
+  viewActions.appendChild(fullscreenBtn);
+  viewHeader.appendChild(viewActions);
+
   const viewBody = document.createElement("div");
   viewBody.className = "dzme-view-body";
 
@@ -223,12 +281,49 @@ export function MapEditorScreen({ engine, onClose }){
   const preview3d = new MapEditorPreview3D({
     container: previewHost,
     getState: ()=>({ mapData, selected }),
+    getTool: ()=> tool,
+    getSelectedAsset: ()=> selectedAsset,
+    onPlace: (payload)=>{
+      if(!payload) return;
+      const { x, y, z, asset } = payload;
+      if(!asset) return;
+      const item = {
+        id: `p${Date.now()}`,
+        type: asset.id,
+        assetId: asset.id,
+        kind: asset.kind,
+        model: asset.model,
+        material: asset.material,
+        collision: asset.collision,
+        collider: asset.collider,
+        x: Number(x || 0),
+        y: Number(y || 0),
+        z: Number(z || 0),
+        rot: 0,
+        scale: Number(asset.scale || 1),
+      };
+      onMutateProp(item);
+    },
+    onSelect: (sel)=>{
+      selected = sel;
+      refreshInspector();
+      refreshList();
+      canvasView.render();
+    },
+    onMove: (sel, pos)=>{
+      if(!sel) return;
+      applyInspectorChange((draft, it)=>{
+        it.x = Number(pos.x || 0);
+        it.y = Number(pos.y || 0);
+      });
+    },
   });
 
   const tools = [
     { value:"select", label:"Select" },
     { value:"wall", label:"Wall" },
     { value:"prop", label:"Prop" },
+    { value:"asset", label:"Asset" },
     { value:"player", label:"Player Spawn" },
     { value:"zombie", label:"Zombie Spawn" },
     { value:"light", label:"Light" },
@@ -254,11 +349,8 @@ export function MapEditorScreen({ engine, onClose }){
     preview3d.resize();
   }
 
-  const toolWrap = document.createElement("div");
-  toolWrap.className = "dzme-card";
-  const toolTitle = document.createElement("div");
-  toolTitle.className = "dzme-card-title";
-  toolTitle.textContent = "Tools";
+  const toolCard = makeCard("Tools");
+  const toolWrap = toolCard.wrap;
   const toolButtons = [];
   const toolList = document.createElement("div");
   toolList.className = "dzme-tool-list";
@@ -272,8 +364,7 @@ export function MapEditorScreen({ engine, onClose }){
     toolButtons.push(btn);
     toolList.appendChild(btn);
   }
-  toolWrap.appendChild(toolTitle);
-  toolWrap.appendChild(toolList);
+  toolCard.body.appendChild(toolList);
 
   const snapToggle = document.createElement("label");
   snapToggle.className = "dzme-toggle";
@@ -288,23 +379,16 @@ export function MapEditorScreen({ engine, onClose }){
   });
   snapToggle.appendChild(snapInput);
   snapToggle.appendChild(snapLabel);
-  toolWrap.appendChild(snapToggle);
+  toolCard.body.appendChild(snapToggle);
 
-  const listWrap = document.createElement("div");
-  listWrap.className = "dzme-card";
-  const listTitle = document.createElement("div");
-  listTitle.className = "dzme-card-title";
-  listTitle.textContent = "Elements";
+  const listCard = makeCard("Elements");
+  const listWrap = listCard.wrap;
   const listBody = document.createElement("div");
   listBody.className = "dzme-list";
-  listWrap.appendChild(listTitle);
-  listWrap.appendChild(listBody);
+  listCard.body.appendChild(listBody);
 
-  const templateWrap = document.createElement("div");
-  templateWrap.className = "dzme-card";
-  const templateTitle = document.createElement("div");
-  templateTitle.className = "dzme-card-title";
-  templateTitle.textContent = "Templates";
+  const templateCard = makeCard("Templates");
+  const templateWrap = templateCard.wrap;
   const templateList = document.createElement("div");
   templateList.className = "dzme-template-list";
   const templates = [
@@ -327,32 +411,35 @@ export function MapEditorScreen({ engine, onClose }){
     });
     templateList.appendChild(btn);
   }
-  templateWrap.appendChild(templateTitle);
-  templateWrap.appendChild(templateList);
+  templateCard.body.appendChild(templateList);
+
+  const assetCard = makeCard("Asset Library");
+  const assetWrap = assetCard.wrap;
+  const assetSearch = document.createElement("input");
+  assetSearch.className = "dzme-input";
+  assetSearch.placeholder = "Search assets";
+  const assetList = document.createElement("div");
+  assetList.className = "dzme-list";
+  assetSearch.addEventListener("input", ()=> renderAssetList());
+  assetCard.body.appendChild(assetSearch);
+  assetCard.body.appendChild(assetList);
 
   left.appendChild(toolWrap);
   left.appendChild(listWrap);
+  left.appendChild(assetWrap);
   left.appendChild(templateWrap);
 
-  const inspectorWrap = document.createElement("div");
-  inspectorWrap.className = "dzme-card";
-  const inspectorTitle = document.createElement("div");
-  inspectorTitle.className = "dzme-card-title";
-  inspectorTitle.textContent = "Inspector";
+  const inspectorCard = makeCard("Inspector");
+  const inspectorWrap = inspectorCard.wrap;
   const inspectorBody = document.createElement("div");
   inspectorBody.className = "dzme-inspector";
-  inspectorWrap.appendChild(inspectorTitle);
-  inspectorWrap.appendChild(inspectorBody);
+  inspectorCard.body.appendChild(inspectorBody);
 
-  const validationWrap = document.createElement("div");
-  validationWrap.className = "dzme-card";
-  const validationTitle = document.createElement("div");
-  validationTitle.className = "dzme-card-title";
-  validationTitle.textContent = "Validation";
+  const validationCard = makeCard("Validation");
+  const validationWrap = validationCard.wrap;
   const validationBody = document.createElement("div");
   validationBody.className = "dzme-validation";
-  validationWrap.appendChild(validationTitle);
-  validationWrap.appendChild(validationBody);
+  validationCard.body.appendChild(validationBody);
 
   right.appendChild(inspectorWrap);
   right.appendChild(validationWrap);
@@ -512,19 +599,48 @@ export function MapEditorScreen({ engine, onClose }){
     }
 
     if(type === "prop"){
+      fields.push(makeField({ label:"Z", value:item.z || 0, onChange:(v)=>{
+        applyInspectorChange((draft, it)=> it.z = Number(v || 0));
+      }, type:"number" }));
+      fields.push(makeSelect({ label:"Mesh", value:item.kind || "box", options:[
+        { value:"box", label:"Box" },
+        { value:"sphere", label:"Sphere" },
+        { value:"cylinder", label:"Cylinder" },
+        { value:"model", label:"Model (GLTF)" },
+      ], onChange:(v)=> applyInspectorChange((draft, it)=> it.kind = String(v || "box")) }));
+      if(String(item.kind || "box") === "model" || item.model){
+        fields.push(makeField({ label:"Model Path", value:item.model || "", onChange:(v)=>{
+          applyInspectorChange((draft, it)=> it.model = String(v || ""));
+        }}));
+      }
       fields.push(makeField({ label:"Type", value:item.type, onChange:(v)=>{
         applyInspectorChange((draft, it)=> it.type = String(v || "crate"));
       }}));
       fields.push(makeField({ label:"Scale", value:item.scale || 1, onChange:(v)=>{
         applyInspectorChange((draft, it)=> it.scale = Number(v || 1));
       }, type:"number" }));
+      fields.push(makeField({ label:"Material", value:item.material?.color || "#ffffff", onChange:(v)=>{
+        applyInspectorChange((draft, it)=> it.material = { ...(it.material||{}), color: String(v || "#ffffff") });
+      }}));
+      fields.push(makeCheckbox({ label:"Collision", checked: item.collision !== false, onChange:(v)=>{
+        applyInspectorChange((draft, it)=> it.collision = Boolean(v));
+      }}));
     }
 
     if(type === "player"){
+      fields.push(makeField({ label:"Z", value:item.z || 0, onChange:(v)=>{
+        applyInspectorChange((draft, it)=> it.z = Number(v || 0));
+      }, type:"number" }));
       fields.push(makeSelect({ label:"Team", value:item.team || "A", options:[
         { value:"A", label:"A" },
         { value:"B", label:"B" },
       ], onChange:(v)=> applyInspectorChange((draft, it)=> it.team = v) }));
+    }
+
+    if(type === "zombie"){
+      fields.push(makeField({ label:"Z", value:item.z || 0, onChange:(v)=>{
+        applyInspectorChange((draft, it)=> it.z = Number(v || 0));
+      }, type:"number" }));
     }
 
     if(type === "light"){
@@ -538,6 +654,9 @@ export function MapEditorScreen({ engine, onClose }){
       }, type:"number" }));
       fields.push(makeField({ label:"Intensity", value:item.intensity || 1, onChange:(v)=>{
         applyInspectorChange((draft, it)=> it.intensity = Number(v || 1));
+      }, type:"number" }));
+      fields.push(makeField({ label:"Spread", value:item.range || 40, onChange:(v)=>{
+        applyInspectorChange((draft, it)=> it.range = Number(v || 0));
       }, type:"number" }));
       fields.push(makeField({ label:"Color", value:item.color || "#ffffff", onChange:(v)=>{
         applyInspectorChange((draft, it)=> it.color = String(v || "#ffffff"));
@@ -583,6 +702,60 @@ export function MapEditorScreen({ engine, onClose }){
     const it = list.find(i=>i.id === selected.id);
     if(it) fn(next, it);
     mapData = next;
+    refreshAll();
+  }
+
+  function renderAssetList(){
+    assetList.innerHTML = "";
+    const query = String(assetSearch.value || "").toLowerCase();
+    const filtered = assets.filter(a=>{
+      if(!query) return true;
+      return String(a.name || a.id).toLowerCase().includes(query);
+    });
+    if(filtered.length === 0){
+      const empty = document.createElement("div");
+      empty.className = "dzme-help";
+      empty.textContent = "No assets in library.";
+      assetList.appendChild(empty);
+      return;
+    }
+    for(const a of filtered){
+      const row = document.createElement("div");
+      row.className = "dzme-list-item";
+      row.textContent = a.name || a.id;
+      row.addEventListener("click", ()=>{
+        selectedAsset = a;
+        canvasView.setAsset(a);
+        setTool("asset");
+      });
+      assetList.appendChild(row);
+    }
+  }
+
+  async function loadAssetLibrary(){
+    const mode = (engine?.ctx?.session?.mode || "zm");
+    assetMode = mode;
+    const base = mode === "mp" ? "/engine/game/mp/map_assets/assetLibrary.json" : "/engine/game/zm/map_assets/assetLibrary.json";
+    try{
+      const res = await fetch(base, { cache:"no-store" });
+      if(!res.ok) throw new Error("asset load failed");
+      const data = await res.json();
+      assets = Array.isArray(data.assets) ? data.assets : [];
+    } catch {
+      assets = [];
+    }
+    selectedAsset = assets[0] || null;
+    canvasView.setAsset(selectedAsset);
+    renderAssetList();
+  }
+
+  function onMutateProp(item){
+    if(!item) return;
+    undo.push(mapData);
+    const next = clone(mapData);
+    next.props.push(item);
+    mapData = next;
+    selected = { type:"prop", id:item.id };
     refreshAll();
   }
 
@@ -654,6 +827,7 @@ export function MapEditorScreen({ engine, onClose }){
       prevMap: engine.ctx.map,
       prevLoopRunning: engine.loop.running,
       prevOverlay: menu?.overlayEl || null,
+      prevScreen: menu?.screenEl || null,
     };
 
     engine.ecs = new ECS();
@@ -669,6 +843,7 @@ export function MapEditorScreen({ engine, onClose }){
     if(!engine.loop.running) engine.start();
     menu?.showHud?.(true);
     menu?.setOverlay?.(null);
+    menu?.setScreen?.(null);
   }
 
   function stopTest(){
@@ -684,6 +859,8 @@ export function MapEditorScreen({ engine, onClose }){
     if(!testSession?.prevLoopRunning) engine.stop();
     if(menu){
       menu.showHud(false);
+      if(testSession?.prevScreen) menu.setScreen(testSession.prevScreen);
+      else menu.setScreen(null);
       if(testSession?.prevOverlay) menu.setOverlay(testSession.prevOverlay);
       else menu.setOverlay(screen);
     }
@@ -744,6 +921,7 @@ export function MapEditorScreen({ engine, onClose }){
   }
 
   setTool("select");
+  loadAssetLibrary();
   setViewMode(viewMode);
   refreshAll();
 
