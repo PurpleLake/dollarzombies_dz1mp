@@ -38,8 +38,15 @@ export class PlayersModule {
     // weapons
     const db = engine.ctx.weapons;
     this.weaponCtl = new WeaponController({ events: engine.events, weaponDB: db });
-    // starter inventory (edit any time)
-    this.weaponCtl.setInventory(["glock_19","ar_m4","sg_pump","lmg_mg42","ar_m4_explosive","sg_auto"]);
+
+    // starter inventory from zombies class selection
+    const opts = engine.ctx.options;
+    const classes = opts?.get("zmClasses") || [];
+    const active = opts?.get("zmActiveClass") || 0;
+    const c = classes[active] || classes[0] || { primary:"ar_m4", secondary:"glock_19", name:"Class" };
+    const inv = [c.primary, c.secondary].filter(Boolean);
+    this.weaponCtl.setInventory(inv.length ? inv : ["glock_19","ar_m4"]);
+    this.weaponCtl.setWeaponByIndex(0);
     this.weaponDef = this.weaponCtl.weaponDef;
     this.weapon = this.weaponCtl.weapon;
 
@@ -94,13 +101,9 @@ export class PlayersModule {
     this.camPivot.rotation.y = this.yaw;
     this.camPitch.rotation.x = this.pitch;
 
-    // weapon switching (1-6)
-    if(this.input.isDown("Digit1")) this.weaponCtl.setWeaponById("glock_19");
-    if(this.input.isDown("Digit2")) this.weaponCtl.setWeaponById("ar_m4");
-    if(this.input.isDown("Digit3")) this.weaponCtl.setWeaponById("sg_pump");
-    if(this.input.isDown("Digit4")) this.weaponCtl.setWeaponById("lmg_mg42");
-    if(this.input.isDown("Digit5")) this.weaponCtl.setWeaponById("ar_m4_explosive");
-    if(this.input.isDown("Digit6")) this.weaponCtl.setWeaponById("sg_auto");
+    // weapon switching based on class inventory
+    if(this.input.isDown("Digit1")) this.weaponCtl.setWeaponByIndex(0);
+    if(this.input.isDown("Digit2")) this.weaponCtl.setWeaponByIndex(1);
     this.weaponDef = this.weaponCtl.weaponDef;
     this.weapon = this.weaponCtl.weapon;
 

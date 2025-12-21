@@ -117,8 +117,8 @@ if(!this._spawned){
   const opts = this.engine.ctx.options;
   const classes = opts.get("mpClasses") || [];
   const active = opts.get("mpActiveClass") || 0;
-  const c = classes[active] || classes[0] || { primary:"ar_m4", secondary:"glock_19", name:"Class" };
-  this._weaponInv = { primary: c.primary, secondary: c.secondary, name: c.name };
+  const c = classes[active] || classes[0] || { primary:"ar_m4", secondary:"glock_19", name:"Class", frag:"Frag", perks:["Perk 1","Perk 2","Perk 3"] };
+  this._weaponInv = { primary: c.primary, secondary: c.secondary, frag: c.frag, perks: c.perks, name: c.name };
 
       // Equip and display viewmodel
       this.weaponCtrl.setInventory([c.primary, c.secondary].filter(Boolean));

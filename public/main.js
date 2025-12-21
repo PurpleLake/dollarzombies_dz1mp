@@ -23,7 +23,7 @@ import { WorldBuilder } from "/engine/core/scripts/world/WorldBuilder.js";
 
 import { MainMenuScreen } from "/engine/core/ui/scripts/screens/MainMenuScreen.js";
 import { MapSelectScreen } from "/engine/core/ui/scripts/screens/MapSelectScreen.js";
-import { LoadoutSelectScreen } from "/engine/core/ui/scripts/screens/LoadoutSelectScreen.js";
+import { ClassEditorScreen } from "/engine/core/ui/scripts/screens/ClassEditorScreen.js";
 import { SettingsScreen } from "/engine/core/ui/scripts/screens/SettingsScreen.js";
 import { PauseMenuOverlay } from "/engine/core/ui/scripts/screens/PauseMenuOverlay.js";
 import { QueueScreen } from "/engine/core/ui/scripts/screens/QueueScreen.js";
@@ -557,29 +557,17 @@ function showLobby(mode=session.mode){
 
 function showClassSelect({ returnToLobby=false } = {}){
   const mode = session.mode || "zm";
-  if(mode === "mp"){
-    menu.toast("Multiplayer class editor coming soon.");
-    return returnToLobby ? showLobby(mode) : showMainMenu();
-  }
   menu.showHud(false);
   menu.setOverlay(null);
-
-  const weapons = engine.ctx.weapons?.list?.() || [];
-  const currentPrimary = options.get("loadoutPrimary") || weapons[0]?.id || null;
-  const currentSecondary = options.get("loadoutSecondary") || (weapons.find(w=> (w.attributes||[]).includes("pistol"))?.id) || weapons[0]?.id || null;
-
-  menu.setScreen(LoadoutSelectScreen({
-    weapons,
-    selectedPrimaryId: currentPrimary,
-    selectedSecondaryId: currentSecondary,
+  menu.setScreen(ClassEditorScreen({
+    engine,
+    mode,
     onBack: ()=> returnToLobby ? showLobby(session.mode) : showMainMenu(),
-    onConfirm: ({ primaryId, secondaryId })=>{
-      if(primaryId) options.set("loadoutPrimary", primaryId);
-      if(secondaryId) options.set("loadoutSecondary", secondaryId);
-      menu.toast(`Loadout set: ${primaryId || "none"} / ${secondaryId || "none"}`);
+    onConfirm: ()=>{
+      menu.toast(`${mode === "mp" ? "Multiplayer" : "Zombies"} class updated.`);
       if(returnToLobby) showLobby(session.mode);
       else showMainMenu();
-    }
+    },
   }));
 }
 
