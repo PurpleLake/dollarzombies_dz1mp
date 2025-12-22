@@ -336,6 +336,10 @@ function resetEcs(){
 }
 
 function destroyCurrentGame(){
+  try { engine.ctx.triggers?.clear?.(); } catch {}
+  try { engine.ctx.entities?.clear?.(); } catch {}
+  try { engine.ctx.nameplates?.clear?.(); } catch {}
+  try { engine.ctx.hud?.clear?.(); } catch {}
   if(game){
     try{ game.dispose?.(); } catch {}
   }
@@ -346,6 +350,8 @@ function destroyCurrentGame(){
   engine.ctx.input = null;
   engine.ctx.world = null;
   engine.ctx.worldBuilder = null;
+  engine.ctx.map = null;
+  engine.ctx.players = [];
   resetEcs();
 }
 
@@ -428,6 +434,7 @@ async function startGame(modeOverride){
   const mapDef = getCurrentMapDef(mode);
   session.mapId = mapDef.id;
   try{
+    scripts.dzs?.resetBetweenGames?.(matchSession.matchId);
     options.set("gameMode", mode);
     if(mode === "mp") options.set("mpMap", mapDef.id);
     else options.set("zmMap", mapDef.id);

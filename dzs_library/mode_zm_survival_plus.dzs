@@ -1,0 +1,41 @@
+// @name ZM Survival Plus
+// @desc Balanced survival mode with HUD wave tracker.
+// @version 1.0.0
+// @tags zombies, mode
+
+on zm:build {
+  worldClear
+  addFloor 70
+  addWalls 70 4
+  addCrate 0 0.5 0
+  addCrate 10 4 0.5
+  addCrate -10 -4 0.5
+  setPlayerSpawn 0 12
+  addZombieSpawn -25 0
+  addZombieSpawn 25 0
+  addZombieSpawn 0 -25
+  addZombieSpawn 0 25
+  setWaveTarget 14
+  setSpawnEveryMs 900
+}
+
+on zm:start {
+  level.wave=1
+  level.waveHud=createHudText("p0","#f6b24d",20,90,"WAVE 1","")
+  iPrintLnBoldAll "^2SURVIVAL PLUS^7 online"
+}
+
+on zm:waveStart {
+  level.wave=(level.wave||1)
+  setHudText(level.waveHud,"WAVE "+level.wave)
+  iPrintLnAll("^3Wave "+level.wave+" started")
+}
+
+on zm:waveEnd {
+  level.wave=(level.wave||1)+1
+  iPrintLnAll("^7Wave complete")
+}
+
+on zm:playerDeath {
+  iPrintLnBoldAll "^1Player down"
+}

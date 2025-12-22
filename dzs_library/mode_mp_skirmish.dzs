@@ -1,0 +1,31 @@
+// @name MP Skirmish
+// @desc Lightweight MP mode with score tracking.
+// @version 1.0.0
+// @tags mp, mode
+
+on mp:build {
+  worldClear
+  addFloor 70
+  addWalls 70 4
+  addCrate 0 0.5 0
+  addCrate 8 2 1
+  addCrate -8 -2 1
+  setPlayerSpawn 0 10
+}
+
+on mp:start {
+  level.score=0
+  level.scoreHud=createHudText("p0","#ffb450",20,90,"SCORE 0","")
+  iPrintLnBoldAll "^4MP SKIRMISH^7 online"
+}
+
+on mp:weaponFired {
+  ## Visual feedback for local players.
+  iPrintLnAll "^2Shots fired"
+}
+
+on mp:playerDeath {
+  level.score=(level.score||0)+1
+  setHudText(level.scoreHud,"SCORE "+level.score)
+  iPrintLnAll("^1Downed!^7 Total: "+level.score)
+}

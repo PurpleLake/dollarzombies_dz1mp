@@ -12,6 +12,12 @@ export class TriggerSystem {
     this._lastPromptId = null;
   }
 
+  clear(){
+    this.triggers.clear();
+    this._lastPromptId = null;
+    this.engine?.events?.emit?.("trigger:prompt", { triggerId: null, prompt: "" });
+  }
+
   create(origin, radius=2.0, opts={}){
     const id = String(opts.id || crypto?.randomUUID?.() || Math.random().toString(36).slice(2));
     const t = {

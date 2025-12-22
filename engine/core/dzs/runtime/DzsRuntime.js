@@ -117,6 +117,8 @@ export class DzsRuntime {
     }
     this._levelVars.delete(mid);
     this._entityVars.delete(mid);
+    this._playerVars.clear();
+    this._globals.clear();
   }
 
   clearEntityVars(matchId, entityId){
@@ -137,7 +139,7 @@ export class DzsRuntime {
     while(i < lines.length){
       let line = lines[i].trim();
       i++;
-      if(!line || line.startsWith("//") || line.startsWith("#")) continue;
+      if(!line || line.startsWith("//") || line.startsWith("##")) continue;
 
       // legacy: on eventName {
       let m = line.match(/^on\s+([a-zA-Z0-9:_-]+)\s*\{\s*$/);
@@ -148,7 +150,7 @@ export class DzsRuntime {
           const raw = lines[i];
           const t = raw.trim();
           i++;
-          if(!t || t.startsWith("//") || t.startsWith("#")) continue;
+          if(!t || t.startsWith("//") || t.startsWith("##")) continue;
           if(t === "}") break;
           body.push(raw);
         }
@@ -165,7 +167,7 @@ export class DzsRuntime {
           const raw = lines[i];
           const t = raw.trim();
           i++;
-          if(!t || t.startsWith("//") || t.startsWith("#")) continue;
+          if(!t || t.startsWith("//") || t.startsWith("##")) continue;
           if(t === "}") break;
           body.push(raw);
         }
@@ -816,7 +818,7 @@ export class DzsRuntime {
     for(const raw of lines){
       let line = raw.trim();
       if(line.length > this.maxLineLen) line = line.slice(0, this.maxLineLen);
-      if(!line || line.startsWith("//")) continue;
+      if(!line || line.startsWith("//") || line.startsWith("##")) continue;
 
       const wasCall = line.startsWith("call ");
       if(wasCall) line = line.slice(5).trim();

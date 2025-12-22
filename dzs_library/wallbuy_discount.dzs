@@ -1,9 +1,10 @@
 // @name Wallbuy Discount
 // @desc Adds a small cashback when purchasing wall weapons.
-// @version 1.0.0
+// @version 1.1.0
 // @tags zombies, economy, perks
 
 on zm:purchase {
+  ## Check purchase type and reward the player.
   if(event && event.type == "wallbuy"){
     cashAdd event.player 50
     iPrintLn event.player "^2Cashback +50"

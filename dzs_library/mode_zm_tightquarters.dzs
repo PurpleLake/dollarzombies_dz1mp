@@ -1,0 +1,26 @@
+// @name ZM Tight Quarters
+// @desc Close-range arena with frequent crates and spawns.
+// @version 1.0.0
+// @tags zombies, mode, arena
+
+on zm:build {
+  worldClear
+  addFloor 45
+  addWalls 45 3
+  addCrate 0 0 0.5
+  addCrate 4 4 0.5
+  addCrate -4 -4 0.5
+  addCrate -4 4 0.5
+  addCrate 4 -4 0.5
+  setPlayerSpawn 0 6
+  addZombieSpawn -14 0
+  addZombieSpawn 14 0
+  addZombieSpawn 0 -14
+  addZombieSpawn 0 14
+  setWaveTarget 12
+  setSpawnEveryMs 650
+}
+
+on zm:start {
+  iPrintLnBoldAll "^1TIGHT QUARTERS^7 online"
+}

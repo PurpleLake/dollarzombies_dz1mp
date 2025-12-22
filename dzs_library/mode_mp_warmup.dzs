@@ -1,0 +1,36 @@
+// @name MP Warmup
+// @desc Timed warmup with shot counter.
+// @version 1.0.0
+// @tags mp, mode
+
+on mp:build {
+  worldClear
+  addFloor 60
+  addWalls 60 3
+  addCrate 0 0.5 0
+  addCrate 6 6 0.5
+  setPlayerSpawn 0 8
+}
+
+on mp:start {
+  level.shots=0
+  level.seconds=0
+  level.shotHud=createHudText("p0","#9cf5ff",20,90,"SHOTS 0","")
+  level.timeHud=createHudText("p0","#ffffff",20,120,"TIME 0","")
+  iPrintLnBoldAll "^3MP WARMUP^7 online"
+  level thread warmupTimer()
+}
+
+warmupTimer(){
+  endon "game_end"
+  while(true){
+    wait 1
+    level.seconds=(level.seconds||0)+1
+    setHudText(level.timeHud,"TIME "+level.seconds)
+  }
+}
+
+on mp:weaponFired {
+  level.shots=(level.shots||0)+1
+  setHudText(level.shotHud,"SHOTS "+level.shots)
+}

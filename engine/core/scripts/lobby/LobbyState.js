@@ -8,6 +8,8 @@ export class LobbyState {
     this.playerOrder = [];
     this.players = [];
     this.hostPlayerId = null;
+    this.dzsLibrary = [];
+    this.dzsSelected = new Map(); // filename -> { filename, name, desc, tags, scriptId }
   }
 
   setMode(mode){
@@ -20,6 +22,38 @@ export class LobbyState {
 
   setMotd(text){
     this.motd = text || "";
+  }
+
+  setDzsLibrary(list = []){
+    this.dzsLibrary = Array.isArray(list) ? list.slice() : [];
+  }
+
+  getDzsLibrary(){
+    return this.dzsLibrary || [];
+  }
+
+  isDzsSelected(filename){
+    const key = String(filename || "");
+    return this.dzsSelected.has(key);
+  }
+
+  getDzsSelection(filename){
+    const key = String(filename || "");
+    return this.dzsSelected.get(key) || null;
+  }
+
+  setDzsSelection(entry){
+    if(!entry?.filename) return;
+    this.dzsSelected.set(String(entry.filename), entry);
+  }
+
+  removeDzsSelection(filename){
+    const key = String(filename || "");
+    this.dzsSelected.delete(key);
+  }
+
+  getAllDzsSelections(){
+    return Array.from(this.dzsSelected.values());
   }
 
   setHostId(id){

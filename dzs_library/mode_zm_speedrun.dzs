@@ -1,0 +1,35 @@
+// @name ZM Speedrun
+// @desc Fast waves and tight spawns for quick sessions.
+// @version 1.0.0
+// @tags zombies, mode, fast
+
+on zm:build {
+  worldClear
+  addFloor 60
+  addWalls 60 3
+  addCrate 6 3 0.5
+  addCrate -6 -3 0.5
+  setPlayerSpawn 0 8
+  addZombieSpawn -18 0
+  addZombieSpawn 18 0
+  addZombieSpawn 0 -18
+  addZombieSpawn 0 18
+  setWaveTarget 8
+  setSpawnEveryMs 450
+}
+
+on zm:start {
+  iPrintLnBoldAll "^3SPEEDRUN^7 mode"
+  level.timer=0
+  level.timerHud=createHudText("p0","#9cf5ff",20,90,"TIME 0","")
+  level thread timeLoop()
+}
+
+timeLoop(){
+  endon "game_end"
+  while(true){
+    wait 1
+    level.timer=(level.timer||0)+1
+    setHudText(level.timerHud,"TIME "+level.timer)
+  }
+}

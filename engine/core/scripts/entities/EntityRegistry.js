@@ -14,6 +14,13 @@ export class EntityRegistry {
     this.loader = new GLTFLoader();
   }
 
+  clear(){
+    for(const ent of this.entities.values()){
+      try{ this.engine.ctx.renderer?.scene?.remove(ent.object3d); } catch {}
+    }
+    this.entities.clear();
+  }
+
   async spawnEntity(type, origin, opts={}){
     const id = String(opts.id || (this._seq++));
     const tag = opts.tag ? String(opts.tag) : null;

@@ -1,6 +1,6 @@
 // @name Wave Announcer
 // @desc Announces wave starts and ends to all players.
-// @version 1.0.0
+// @version 1.1.0
 // @tags zombies, ui
 
 on zm:waveStart {

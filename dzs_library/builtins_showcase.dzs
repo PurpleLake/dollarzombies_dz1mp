@@ -1,26 +1,35 @@
 // @name Builtins Showcase
 // @desc Sample usage of common builtins, threads, and signals.
-// @version 1.0.0
+// @version 1.1.0
 // @tags reference, builtins, tutorial
 
 on onGameStart {
+  level.wave=1
   level thread welcomeLoop()
 }
 
 welcomeLoop(){
   endon "game_end"
-  iPrintLnBoldAll "^6Welcome to the builtins showcase"
-  wait 2
+  iPrintLnBoldAll "^6Builtins Showcase"
+  wait 1.5
   log Builtins running
+  notify "demo_signal" "ready"
 }
 
 on onPlayerSpawned {
+  ## Show a simple HUD message on spawn.
   self thread starterHud()
 }
 
 starterHud(){
   endon "disconnect"
-  id = createHudText(self, #ffffff, 20, 60, "Spawned!", "")
-  wait 3
-  removeHud(id)
+  hudId=createHudText(self,"#ffffff",20,60,"Spawned!","")
+  wait 2
+  removeHud(hudId)
+}
+
+on onBuiltinShowcase {
+  ## Signal demo.
+  waittill "demo_signal"
+  iPrintLnAll "^2Signal received"
 }

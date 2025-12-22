@@ -585,6 +585,50 @@ function injectStyles(){
       letter-spacing: 0.06em;
       line-height: 1.4;
     }
+    .dz-lobby-script-list{
+      display:flex;
+      flex-direction:column;
+      gap: 10px;
+      max-height: 360px;
+      overflow:auto;
+      padding-right: 2px;
+    }
+    .dz-lobby-script-item{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap: 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.35);
+      padding: 10px 12px;
+    }
+    .dz-lobby-script-info{
+      display:flex;
+      flex-direction:column;
+      gap: 4px;
+      min-width: 0;
+    }
+    .dz-lobby-script-name{
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .dz-lobby-script-meta{
+      font-size: 11px;
+      color: var(--lobby-text-dim, rgba(238,242,245,0.6));
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .dz-lobby-script-desc{
+      font-size: 12px;
+      color: var(--lobby-text-dim, rgba(238,242,245,0.6));
+    }
+    .dz-lobby-script-actions{
+      display:flex;
+      align-items:center;
+    }
     @keyframes dz-lobby-panel-in{
       from{opacity:0; transform:translateY(8px);}
       to{opacity:1; transform:translateY(0);}
@@ -627,13 +671,14 @@ function clampIndex(value, max){
 }
 
 export class LobbyUI {
-  constructor({ state, onBack, onReadyToggle, onVote, onStart, onCreateClass, getLocalPlayerId }){
+  constructor({ state, onBack, onReadyToggle, onVote, onStart, onCreateClass, onScriptToggle, getLocalPlayerId }){
     this.state = state;
     this.onBack = onBack;
     this.onReadyToggle = onReadyToggle;
     this.onVote = onVote;
     this.onStart = onStart;
     this.onCreateClass = onCreateClass;
+    this.onScriptToggle = onScriptToggle;
     this.getLocalPlayerId = getLocalPlayerId || (()=>null);
 
     this.mapCards = new Map();
@@ -645,6 +690,7 @@ export class LobbyUI {
     this.kbRegion = "nav";
     this.previewMode = null;
     this.settingsOpen = false;
+    this.scriptsOpen = false;
 
     this.motdMessages = [];
     this.motdIndex = 0;
@@ -692,6 +738,9 @@ export class LobbyUI {
     this.settingsModal = this.buildSettingsModal();
     this.screen.appendChild(this.settingsModal);
 
+    this.scriptsModal = this.buildScriptsModal();
+    this.screen.appendChild(this.scriptsModal);
+
     this.main.appendChild(this.sidebar);
     this.main.appendChild(this.center);
     this.main.appendChild(this.right);
@@ -736,6 +785,7 @@ export class LobbyUI {
       { id: "weapons", label: "Weapons" },
       { id: "operators", label: "Operators" },
       { id: "challenges", label: "Challenges" },
+      { id: "scripts", label: "Scripts" },
       { id: "settings", label: "Settings" }
     ];
     for(const item of items){
@@ -889,10 +939,51 @@ export class LobbyUI {
     return modal;
   }
 
+  buildScriptsModal(){
+    const modal = document.createElement("div");
+    modal.className = "dz-lobby-modal";
+    const card = document.createElement("div");
+    card.className = "dz-lobby-modal-card";
+    const title = document.createElement("div");
+    title.className = "dz-lobby-modal-title";
+    title.textContent = "Scripts";
+    const text = document.createElement("div");
+    text.className = "dz-lobby-modal-text";
+    text.textContent = "Host can preload scripts that will run at match start.";
+    const status = document.createElement("div");
+    status.className = "dz-lobby-modal-text";
+    this.scriptsStatus = status;
+    const list = document.createElement("div");
+    list.className = "dz-lobby-script-list";
+    this.scriptsList = list;
+    const actions = document.createElement("div");
+    actions.className = "dz-lobby-action-row";
+    const closeBtn = Button({ text: "Close", variant: "secondary", onClick: ()=>this.toggleScripts(false) });
+    closeBtn.classList.add("dz-lobby-btn", "dz-lobby-hover-fade");
+    actions.appendChild(closeBtn);
+
+    card.appendChild(title);
+    card.appendChild(text);
+    card.appendChild(status);
+    card.appendChild(list);
+    card.appendChild(actions);
+    modal.appendChild(card);
+    modal.addEventListener("click", (e)=>{
+      if(e.target === modal) this.toggleScripts(false);
+    });
+    return modal;
+  }
+
   toggleSettings(open){
     const next = typeof open === "boolean" ? open : !this.settingsOpen;
     this.settingsOpen = next;
     this.settingsModal.classList.toggle("is-open", next);
+  }
+
+  toggleScripts(open){
+    const next = typeof open === "boolean" ? open : !this.scriptsOpen;
+    this.scriptsOpen = next;
+    this.scriptsModal.classList.toggle("is-open", next);
   }
 
   togglePreviewMode(){
@@ -909,11 +1000,15 @@ export class LobbyUI {
     this.screen.addEventListener("keydown", (e)=>{
       const key = e.key;
       if(key === "Escape"){
-        this.toggleSettings();
+        if(this.scriptsOpen){
+          this.toggleScripts(false);
+        } else {
+          this.toggleSettings();
+        }
         e.preventDefault();
         return;
       }
-      if(this.settingsOpen) return;
+      if(this.settingsOpen || this.scriptsOpen) return;
       if(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter"].includes(key)){
         e.preventDefault();
       } else {
@@ -976,6 +1071,10 @@ export class LobbyUI {
     }
     if(id === "create"){
       this.onCreateClass?.();
+      return;
+    }
+    if(id === "scripts"){
+      this.toggleScripts(true);
       return;
     }
     if(id === "settings"){
@@ -1088,6 +1187,7 @@ export class LobbyUI {
 
     this.renderMaps(localId, mode);
     this.renderPlayers(localId, hostId, mode);
+    this.renderScripts(localId, hostId);
 
     if((this.state?.motd || "") !== this.motdSeed){
       this.refreshMotdMessages();
@@ -1095,6 +1195,58 @@ export class LobbyUI {
 
     this.setActiveNav(this.activeNavIndex);
     this.setActiveMap(this.activeMapIndex);
+  }
+
+  renderScripts(localId, hostId){
+    if(!this.scriptsList || !this.scriptsStatus) return;
+    const isHost = hostId && localId && String(hostId) === String(localId);
+    const library = this.state?.getDzsLibrary?.() || [];
+    const selected = this.state?.getAllDzsSelections?.() || [];
+    this.scriptsStatus.textContent = isHost
+      ? `Preloaded: ${selected.length}`
+      : `Host-only. Preloaded: ${selected.length}`;
+    this.scriptsList.innerHTML = "";
+    if(!library.length){
+      const empty = document.createElement("div");
+      empty.className = "dz-lobby-modal-text";
+      empty.textContent = "No scripts found in library.";
+      this.scriptsList.appendChild(empty);
+      return;
+    }
+    for(const s of library){
+      const row = document.createElement("div");
+      row.className = "dz-lobby-script-item";
+      const info = document.createElement("div");
+      info.className = "dz-lobby-script-info";
+      const name = document.createElement("div");
+      name.className = "dz-lobby-script-name";
+      name.textContent = s.name || s.filename;
+      const meta = document.createElement("div");
+      meta.className = "dz-lobby-script-meta";
+      const tags = Array.isArray(s.tags) && s.tags.length ? ` | ${s.tags.join(", ")}` : "";
+      const version = s.version ? `v${s.version}` : "v?";
+      meta.textContent = `${version}${tags}`;
+      const desc = document.createElement("div");
+      desc.className = "dz-lobby-script-desc";
+      desc.textContent = s.desc || s.filename;
+      info.appendChild(name);
+      info.appendChild(meta);
+      info.appendChild(desc);
+
+      const actions = document.createElement("div");
+      actions.className = "dz-lobby-script-actions";
+      const isSelected = this.state?.isDzsSelected?.(s.filename);
+      const btn = Button({ text: isSelected ? "Remove" : "Preload", variant: "secondary", onClick: ()=>{
+        this.onScriptToggle?.(s, isSelected);
+      }});
+      btn.classList.add("dz-lobby-btn");
+      btn.disabled = !isHost;
+      actions.appendChild(btn);
+
+      row.appendChild(info);
+      row.appendChild(actions);
+      this.scriptsList.appendChild(row);
+    }
   }
 
   renderMaps(localId, mode){

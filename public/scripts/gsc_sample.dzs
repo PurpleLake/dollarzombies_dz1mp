@@ -1,7 +1,8 @@
-# GSC-style sample script for custom modes.
+## GSC-style sample script that includes examples for every builtin.
+## Trigger the examples by calling onBuiltinExamples from the console or another script.
 
 on onGameStart {
-  level.wave = 1
+  level.wave=1
   level thread modeController()
 }
 
@@ -9,8 +10,8 @@ modeController(){
   endon "game_end"
   while(true){
     wait 30
-    level.wave = (level.wave || 1) + 1
-    iPrintLnAll ^3Wave:^7 level.wave
+    level.wave=(level.wave||1)+1
+    iPrintLnAll("^3Wave:^7 " + level.wave)
   }
 }
 
@@ -22,6 +23,133 @@ playerDeathLoop(){
   endon "disconnect"
   while(true){
     waittill "death"
-    iPrintLnAll ^1Player died.
+    iPrintLnAll "^1Player died."
   }
+}
+
+on onBuiltinExamples {
+  log Builtin examples begin
+  level.demo=1
+  self&&(self.demo=2)
+  setTimeout "exampleNotify" 10
+  waittill "demo_signal"
+  endon "game_end"
+
+  players=getAllPlayers()
+  p0=players[0]
+  named=getPlayerByName("Player0")
+
+  iPrintLn(p0,"^2Hello player")
+  iPrintLnBold(p0,"^1Bold alert")
+  iPrintLnAll "^3Broadcast message"
+  iPrintLnBoldAll "^1Broadcast alert"
+
+  cash=getCash(p0)
+  setCash(p0,500)
+  cashAdd(p0,50)
+  cashSub(p0,10)
+
+  hudPanel=createHudItem("p0","#ffffff",220,40,20,20,"Panel","")
+  hudText=createHudText("p0","#ffffff",20,60,"HUD text","")
+  setHudText(hudText,"Score:100")
+  setHudColor(hudText,"#00ff99")
+  setHudPos(hudText,20,80)
+  setHudSize(hudPanel,260,44)
+  setHudVisible(hudPanel,true)
+  setHudZ(hudPanel,12)
+  setHudBackground(hudPanel,"rgba(0,0,0,0.4)")
+  setHudShader(hudPanel,"scanline")
+  removeHud(hudPanel)
+
+  trig=createTrigger("p0",3,"^2Press F")
+  setTriggerPrompt(trig,"^2Hold F")
+  setTriggerRadius(trig,4)
+  setTriggerEnabled(trig,true)
+  setTriggerCooldown(trig,500)
+  setTriggerHoldTime(trig,600)
+  getTriggerHoldProgress(trig)
+  onTriggerUse(trig,"onDemoTriggerUse")
+  onTriggerEnter(trig,"onDemoTriggerEnter")
+  onTriggerExit(trig,"onDemoTriggerExit")
+  getAllTriggers()
+  destroyTrigger(trig)
+
+  ent=spawnEntity("box",{x:0,y:1,z:0},{"tag":"demo"})
+  model=spawnModel("/assets/props/crate.glb",{x:1,y:1,z:0},{"tag":"demo"})
+  attachEntity(ent,model,{x:0,y:1,z:0})
+  raycast({x:0,y:1,z:0},{x:0,y:0,z:-1},30)
+  getAllEntities()
+  getEntityById(ent)
+  getEntitiesByTag("demo")
+  getEntitiesInRadius({x:0,y:0,z:0},5)
+  getEntityPos(ent)
+  setEntityPos(ent,{x:0,y:1,z:1})
+  getEntityAngles(ent)
+  setEntityAngles(ent,{x:0,y:0,z:0})
+  setEntityHealth(ent,100)
+  damageEntity(ent,10,p0)
+  setEntityTag(ent,"demo")
+  setEntityVisible(ent,true)
+  setEntityScale(ent,1.2)
+  deleteEntity(ent)
+
+  playSound(p0,"round_start")
+  playSoundAll("round_start")
+
+  setVar("globalFlag",1)
+  getVar("globalFlag")
+  setPlayerVar(p0,"perk","speed")
+  getPlayerVar(p0,"perk")
+  setEntityVar(ent,"state","alive")
+  getEntityVar(ent,"state")
+
+  timerId=setTimeout("exampleTimeout",1000)
+  intervalId=setInterval("exampleInterval",500)
+  clearTimer(timerId)
+  clearTimer(intervalId)
+
+  thread exampleThread()
+  self thread exampleThread()
+  level thread exampleThread()
+  tid=startThread("exampleThread")
+  stopThread(tid)
+  getAllThreads()
+
+  worldClear
+  addFloor 50
+  addWalls 50 4
+  addCrate 0 0.5 0
+  setPlayerSpawn 0 10
+  addZombieSpawn 0 20
+  setWaveTarget 10
+  setSpawnEveryMs 750
+}
+
+exampleNotify(){
+  notify "demo_signal" 1 2 3
+}
+
+onDemoTriggerUse(){
+  log Trigger used
+}
+
+onDemoTriggerEnter(){
+  log Trigger entered
+}
+
+onDemoTriggerExit(){
+  log Trigger exited
+}
+
+exampleTimeout(){
+  log Timer fired
+}
+
+exampleInterval(){
+  log Interval tick
+}
+
+exampleThread(){
+  wait 0.2
+  threadEnd
 }

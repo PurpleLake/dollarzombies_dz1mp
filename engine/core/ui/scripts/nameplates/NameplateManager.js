@@ -124,4 +124,11 @@ export class NameplateManager {
       }
     }
   }
+
+  clear(){
+    for(const plate of this.plates.values()){
+      try{ plate.el.remove(); } catch {}
+    }
+    this.plates.clear();
+  }
 }

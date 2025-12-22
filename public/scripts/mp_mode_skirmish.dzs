@@ -1,0 +1,37 @@
+# @name MP Skirmish
+# @desc Lightweight MP game mode authored in DZS.
+# @version 1.0
+# @tags mp,mode
+
+on mp:build {
+  worldClear
+  addFloor 70
+  addWalls 70 4
+  addCrate 0 0.5 0
+  addCrate 8 2 1
+  addCrate -8 -2 1
+  setPlayerSpawn 0 10
+}
+
+on mp:start {
+  level.scoreLimit=25
+  level.deaths=0
+  iPrintLnBoldAll ^4MP SKIRMISH^7 online
+  iPrintLnAll ^3First to 25 eliminations
+  level.modeHud=createHudText("p0","#9cf5ff",20,80,"MP SKIRMISH","")
+  level.deathHud=createHudText("p0","#ffffff",20,110,"DEATHS: 0","")
+}
+
+on mp:playerSpawn {
+  iPrintLnAll "^2Player spawned"
+}
+
+on mp:weaponFired {
+  event&&event.playerId&&log("MP shot by " + event.playerId)
+}
+
+on mp:playerDeath {
+  level.deaths=(level.deaths||0)+1
+  setHudText(level.deathHud,"DEATHS: "+level.deaths)
+  iPrintLnAll("^1Downed!^7 Total deaths: "+level.deaths)
+}
