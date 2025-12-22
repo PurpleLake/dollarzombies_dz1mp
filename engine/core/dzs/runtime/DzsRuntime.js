@@ -708,6 +708,7 @@ export class DzsRuntime {
   _argToJs(tok){
     if(/^-?\d+(\.\d+)?$/.test(tok)) return tok;
     if((tok.startsWith('"') && tok.endsWith('"')) || (tok.startsWith("'") && tok.endsWith("'"))) return tok;
+    if(/^\^\d/.test(tok)) return JSON.stringify(tok);
     if(/^#[0-9a-fA-F]{3,8}$/.test(tok)) return JSON.stringify(tok);
     if(/^[A-Za-z_][\w-]*$/.test(tok)) return JSON.stringify(tok);
     return tok;

@@ -12,7 +12,7 @@ export function injectNotificationStyles(){
   }
   .dz-notify-br {
     position: absolute;
-    right: 18px;
+    left: 18px;
     bottom: 18px;
     display: flex;
     flex-direction: column-reverse;
@@ -29,7 +29,8 @@ export function injectNotificationStyles(){
   }
   .dz-notify-center {
     position: absolute;
-    top: 45%;
+    top: 50%;
+    transform: translateY(-50%);
     width: 100%;
     display: flex;
     justify-content: center;

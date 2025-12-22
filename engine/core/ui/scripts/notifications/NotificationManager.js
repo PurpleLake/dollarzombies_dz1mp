@@ -20,7 +20,8 @@ export class NotificationManager {
 
     root.appendChild(br);
     root.appendChild(center);
-    document.body.appendChild(root);
+    const hudLayer = this.engine?.ctx?.uiRoot?.layers?.hud || null;
+    (hudLayer || document.body).appendChild(root);
 
     const obj = { root, br, center };
     this.playerRoots.set(player, obj);

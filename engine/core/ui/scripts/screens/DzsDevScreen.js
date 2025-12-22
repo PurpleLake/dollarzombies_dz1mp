@@ -328,6 +328,10 @@ export function DzsDevScreen({ engine, onClose }){
     return engine?.ctx?.matchSession?.state === "LOBBY";
   }
 
+  function isInMatch(){
+    return engine?.ctx?.matchSession?.state === "IN_MATCH";
+  }
+
   function studioLog(msg){
     studioState.output.push({ msg: String(msg || ""), ts: Date.now() });
     if(studioState.output.length > 200) studioState.output.shift();
@@ -485,11 +489,11 @@ export function DzsDevScreen({ engine, onClose }){
       studioLog("Inject blocked: host-only.");
       return;
     }
-    if(!isLobby()){
+    if(!isLobby() && !isInMatch()){
       if(!skipQueue){
         queueAction({ type:"inject", filename, text });
       } else {
-        studioLog("Inject blocked: lobby-only.");
+        studioLog("Inject blocked: match-only.");
       }
       return;
     }

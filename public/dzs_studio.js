@@ -85,6 +85,10 @@ function isLobby(){
   return state.matchStatus === "lobby";
 }
 
+function isActive(){
+  return state.matchStatus === "active";
+}
+
 function updateStatus(){
   const matchId = els.matchId.value || "n/a";
   const hostId = state.hostPlayerId || "n/a";
@@ -400,9 +404,9 @@ async function injectScript(filename, text, skipQueue=false){
     log("Inject blocked: host-only.");
     return;
   }
-  if(!isLobby()){
+  if(!isLobby() && !isActive()){
     if(!skipQueue) queueAction({ type: "inject", filename, text });
-    else log("Inject blocked: lobby-only.");
+    else log("Inject blocked: match-only.");
     return;
   }
   const matchId = els.matchId.value || "global";
@@ -548,6 +552,15 @@ async function boot(){
   const params = new URLSearchParams(location.search);
   els.matchId.value = params.get("matchId") || "";
   els.clientId.value = params.get("clientId") || "";
+
+  window.addEventListener("error", (e)=>{
+    const msg = e?.error?.stack || e?.message || "Unknown error";
+    log(`[error] ${msg}`);
+  });
+  window.addEventListener("unhandledrejection", (e)=>{
+    const msg = e?.reason?.stack || e?.reason || "Unhandled rejection";
+    log(`[error] ${msg}`);
+  });
 
   attachEvents();
   await loadBuiltins();

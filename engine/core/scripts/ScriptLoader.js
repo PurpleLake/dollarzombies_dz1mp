@@ -34,6 +34,7 @@ export class ScriptLoader {
       ["zm:playerSpawn", ["onPlayerSpawn", "onPlayerSpawned"]],
       ["zm:playerDeath", ["onPlayerDeath"]],
       ["zm:playerDamaged", ["onPlayerDamaged"]],
+      ["zm:weaponFired", ["onWeaponFired"]],
       ["zm:zombieDamaged", ["onEntityDamaged", "onZombieDamaged"]],
       ["zm:purchase", ["onPurchase"]],
     ];
@@ -52,6 +53,15 @@ export class ScriptLoader {
 
     for (const [evt, handlers] of zmRoutes) route(evt, handlers);
     for (const [evt, handlers] of mpRoutes) route(evt, handlers);
+
+    // TriggerSystem and other systems can call explicit DZS handlers.
+    const offDzsCall = this.engine.events.on("dzs:call", ({ handler, payload })=>{
+      if(!handler) return;
+      const owner = this.dzs.resolveOwner(payload);
+      const matchId = this.engine?.ctx?.matchSession?.matchId ?? null;
+      this.dzs.run(String(handler), payload, { owner, matchId });
+    });
+    this._unsubs.push(offDzsCall);
 
     // Script tick (timers)
     const offTick = this.engine.events.on("engine:tick", ({ dt, t })=>{

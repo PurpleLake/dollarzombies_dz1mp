@@ -54,7 +54,10 @@ export class DzsScriptManager {
       installedAt: Date.now(),
     };
     this._scripts.set(resolvedId, record);
-    this.enable(resolvedId);
+    const enabled = this.enable(resolvedId);
+    if(enabled && this.runtime?.ctx?.matchSession?.state === "IN_MATCH"){
+      this.events?.emit?.("dev:toast", { msg: `Injected ${record.filename} successfully.` });
+    }
     return resolvedId;
   }
 
@@ -69,6 +72,20 @@ export class DzsScriptManager {
     this.runtime.loadText(record.text, record.filename, record.scriptId);
     record.enabled = true;
     record.lastEnabledAt = Date.now();
+
+    if(this.runtime?.ctx?.matchSession?.state === "IN_MATCH"){
+      const matchId = this.runtime.ctx.matchSession?.matchId ?? null;
+      const player = this.runtime.ctx.player || null;
+      try {
+        this.runtime.run?.("onGameStart", { injected:true }, { scriptId: id, matchId });
+        if(player){
+          this.runtime.run?.("onPlayerSpawned", { player, injected:true }, { scriptId: id, matchId });
+          this.runtime.run?.("onPlayerSpawn", { player, injected:true }, { scriptId: id, matchId });
+        }
+      } catch (err){
+        this._emit(`auto-start failed for ${id}: ${err?.message || err}`);
+      }
+    }
     return true;
   }
 

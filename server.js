@@ -187,6 +187,13 @@ function isMatchLobby(matchId){
   return match?.status === "lobby";
 }
 
+function isMatchInjectable(matchId){
+  if(!matchId) return false;
+  const match = matchManager.getMatch(matchId);
+  if(!match) return false;
+  return match.status !== "ended";
+}
+
 const server = http.createServer((req, res) => {
   try {
     const u = new URL(req.url, `http://${req.headers.host}`);
@@ -263,8 +270,8 @@ const server = http.createServer((req, res) => {
           sendJson(res, 403, { ok: false, error: "not_host" });
           return;
         }
-        if(!isMatchLobby(matchId)){
-          sendJson(res, 409, { ok: false, error: "not_in_lobby" });
+        if(!isMatchInjectable(matchId)){
+          sendJson(res, 409, { ok: false, error: "not_in_match" });
           return;
         }
         const filename = String(body?.filename || "(dzs)");

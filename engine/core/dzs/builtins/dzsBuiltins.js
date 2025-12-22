@@ -132,10 +132,18 @@ export function makeBuiltins(ctx){
     log: (...args)=> ctx.events.emit("log", { msg: "[dzs] " + args.map(a=>String(a)).join(" ") }),
 
     // Players
-    getAllPlayers: ()=> (ctx.players || []),
+    getAllPlayers: ()=>{
+      const players = Array.isArray(ctx.players) ? ctx.players : [];
+      if(players.length) return players;
+      return ctx.player ? [ctx.player] : [];
+    },
     getPlayerByName: (name)=>{
       const n = String(name ?? "");
-      return (ctx.players || []).find(p=>String(p.name) === n) || null;
+      const players = Array.isArray(ctx.players) ? ctx.players : [];
+      const hit = players.find(p=>String(p.name) === n) || null;
+      if(hit) return hit;
+      if(ctx.player && String(ctx.player.name) === n) return ctx.player;
+      return null;
     },
 
     // Cash
