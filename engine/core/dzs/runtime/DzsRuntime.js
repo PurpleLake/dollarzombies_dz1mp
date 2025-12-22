@@ -135,6 +135,35 @@ export class DzsRuntime {
     let i = 0;
 
     const err = (msg)=>{ throw new Error(`[dzs parse] ${filename}:${i+1} ${msg}`); };
+    const braceDelta = (raw)=>{
+      let delta = 0;
+      let quote = null;
+      let escape = false;
+      for(let idx = 0; idx < raw.length; idx++){
+        const ch = raw[idx];
+        const next = raw[idx + 1];
+        if(quote){
+          if(escape){
+            escape = false;
+            continue;
+          }
+          if(ch === "\\"){
+            escape = true;
+            continue;
+          }
+          if(ch === quote) quote = null;
+          continue;
+        }
+        if(ch === '"' || ch === "'"){
+          quote = ch;
+          continue;
+        }
+        if(ch === "/" && next === "/") break;
+        if(ch === "{") delta++;
+        else if(ch === "}") delta--;
+      }
+      return delta;
+    };
 
     while(i < lines.length){
       let line = lines[i].trim();
@@ -146,30 +175,34 @@ export class DzsRuntime {
       if(m){
         const name = m[1];
         const body = [];
+        let depth = 1;
         while(i < lines.length){
           const raw = lines[i];
           const t = raw.trim();
           i++;
           if(!t || t.startsWith("//") || t.startsWith("##")) continue;
-          if(t === "}") break;
+          if(t === "}" && depth === 1){ depth = 0; break; }
           body.push(raw);
+          depth += braceDelta(raw);
         }
         this.on(name, body, id);
         continue;
       }
 
-      // function style: name(){
-      m = line.match(/^([A-Za-z_][\w]*)\s*\(\s*\)\s*\{\s*$/);
+      // function style: name() or name(args)
+      m = line.match(/^([A-Za-z_][\w]*)\s*\(\s*[^)]*\)\s*\{\s*$/);
       if(m){
         const name = m[1];
         const body = [];
+        let depth = 1;
         while(i < lines.length){
           const raw = lines[i];
           const t = raw.trim();
           i++;
           if(!t || t.startsWith("//") || t.startsWith("##")) continue;
-          if(t === "}") break;
+          if(t === "}" && depth === 1){ depth = 0; break; }
           body.push(raw);
+          depth += braceDelta(raw);
         }
         this.on(name, body, id);
         continue;

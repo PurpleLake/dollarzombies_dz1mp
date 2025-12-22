@@ -13,6 +13,7 @@ export class NetClient {
     this.connected = false;
     this.matchId = null;
     this.matchMode = null;
+    this.matchGamemode = null;
 
     this._prevHp = new Map();
 
@@ -26,7 +27,7 @@ export class NetClient {
 
     ws.addEventListener("open", ()=>{
       this.connected = true;
-      this._send({ t:"hello", mode:this.mode });
+      this._send({ t:"hello", mode:this.mode, name: this.name });
       this.engine?.events?.emit?.("net:open", {});
     });
 
@@ -71,6 +72,7 @@ export class NetClient {
     if(msg.t === "matchFound"){
       this.matchId = msg.matchId;
       this.matchMode = msg.mode;
+      this.matchGamemode = msg.gamemode ?? null;
       this.engine?.events?.emit?.("match:found", msg);
       return;
     }
@@ -101,6 +103,8 @@ export class NetClient {
     if(msg.t === "matchEnded"){
       this.matchId = null;
       this.matchMode = null;
+      this.matchGamemode = null;
+      this.team = null;
       this.engine?.events?.emit?.("match:ended", msg);
       return;
     }
@@ -124,6 +128,29 @@ if(msg.t === "died"){
 }
 if(msg.t === "killed"){
   this.engine?.events?.emit?.("mp:kill", msg);
+  return;
+}
+if(msg.t === "mpKill"){
+  this.engine?.events?.emit?.("mp:kill", msg);
+  return;
+}
+if(msg.t === "teamAssigned"){
+  this.team = msg.team ?? this.team ?? null;
+  this.engine?.events?.emit?.("mp:teamAssigned", msg);
+  return;
+}
+if(msg.t === "matchState"){
+  const state = msg.state || {};
+  if(this.engine?.ctx){
+    const cur = this.engine.ctx.matchState || {};
+    this.engine.ctx.matchState = { ...cur, ...state };
+  }
+  this.engine?.events?.emit?.("mp:matchState", { state: msg.state || {}, matchId: msg.matchId });
+  return;
+}
+if(msg.t === "matchEvent"){
+  const name = String(msg.name || "");
+  if(name) this.engine?.events?.emit?.(name, msg.payload || {});
   return;
 }
 
@@ -179,6 +206,13 @@ if(msg.t === "killed"){
     try { this.ws?.send(JSON.stringify(obj)); } catch {}
   }
 
+  setName(name){
+    const next = String(name || "").trim();
+    if(!next) return;
+    this.name = next;
+    if(this.connected) this._send({ t:"setName", name: next });
+  }
+
   sendLobbyReady(ready){
     this._send({ t:"lobby_ready", playerId: this.clientId, ready: Boolean(ready) });
   }
@@ -192,7 +226,8 @@ if(msg.t === "killed"){
   }
 
   sendQueueJoin(mode){
-    this._send({ t:"queueJoin", mode });
+    const gamemode = this.engine?.ctx?.session?.mpGamemode || null;
+    this._send({ t:"queueJoin", mode, gamemode });
   }
 
   sendQueueLeave(){
@@ -215,12 +250,26 @@ if(msg.t === "killed"){
     this._send({ t:"startMatch" });
   }
 
-  sendEndMatch(){
-    this._send({ t:"endMatch" });
+  sendEndMatch(reason){
+    this._send({ t:"endMatch", reason });
   }
 
   sendEndMatchAdmin(matchId){
     this._send({ t:"endMatchAdmin", matchId });
+  }
+
+  sendMatchState(patch){
+    if(!patch) return;
+    this._send({ t:"matchState", patch });
+  }
+
+  sendMatchEvent(name, payload){
+    if(!name) return;
+    this._send({ t:"matchEvent", name, payload });
+  }
+
+  sendPlayerSpawned(payload = {}){
+    this._send({ t:"playerSpawned", playerId: payload.playerId, team: payload.team, pos: payload.pos });
   }
 
   sendServerMaster(){

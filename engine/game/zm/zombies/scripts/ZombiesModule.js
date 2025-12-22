@@ -44,8 +44,20 @@ export class ZombiesModule {
   clear(){
     for(const z of this.zombies.values()){
       this.r.scene.remove(z.mesh);
+      if(z.hitboxes?.length){
+        for(const h of z.hitboxes){
+          this.r.scene.remove(h);
+          h.geometry?.dispose?.();
+          h.material?.dispose?.();
+        }
+      }
+      if(z.bar?.root) this.r.scene.remove(z.bar.root);
       z.mesh.geometry?.dispose?.();
       z.mesh.material?.dispose?.();
+      if(z.bar?.fg?.geometry) z.bar.fg.geometry.dispose?.();
+      if(z.bar?.fg?.material) z.bar.fg.material.dispose?.();
+      if(z.bar?.bg?.geometry) z.bar.bg.geometry.dispose?.();
+      if(z.bar?.bg?.material) z.bar.bg.material.dispose?.();
     }
     this.zombies.clear();
   }
@@ -81,9 +93,17 @@ export class ZombiesModule {
           n.userData.entityId = key;
           if(n.material){
             const mats = Array.isArray(n.material) ? n.material : [n.material];
+            const name = String(n.name || "").toLowerCase();
+            let base = 0x7a2222;
+            let emissive = 0x2a0a0a;
+            if(name.includes("eye")) { base = 0xb51e1e; emissive = 0x9a1313; }
+            else if(name.includes("head")) base = 0x8a2b2b;
+            else if(name.includes("arm")) base = 0x6f1d1d;
+            else if(name.includes("leg")) base = 0x5f1818;
+            else if(name.includes("torso") || name.includes("body") || name.includes("chest")) base = 0x7a2222;
             for(const m of mats){
-              if(m.color) m.color.setHex(0x5f8f62);
-              if(m.emissive) m.emissive.setHex(0x132816);
+              if(m.color) m.color.setHex(base);
+              if(m.emissive) m.emissive.setHex(emissive);
             }
           }
         }
@@ -98,7 +118,7 @@ export class ZombiesModule {
       hitboxes = this._makeHitboxes(mesh, key);
     } else {
       const geo = new THREE.CapsuleGeometry(0.35, 1.0, 6, 10);
-      const mat = new THREE.MeshStandardMaterial({ color: 0x5aa06a, roughness: 0.9, metalness: 0.0, emissive: 0x132816 });
+      const mat = new THREE.MeshStandardMaterial({ color: 0x7a2222, roughness: 0.9, metalness: 0.0, emissive: 0x2a0a0a });
       mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(sp.x, 1.05, sp.z);
       mesh.castShadow = true;
@@ -108,24 +128,46 @@ export class ZombiesModule {
 
     this.r.scene.add(mesh);
     if(hitboxes){
-      for(const h of hitboxes) this.r.scene.add(h);
+      for(const h of hitboxes){
+        if(h.parent !== mesh) mesh.add(h);
+      }
     }
-    this.zombies.set(key, { mesh, mixer, actions, hitboxes, hp: 100, speed: 1.35, attackCooldown: 0 });
+    const bar = this._makeHealthBar(mesh);
+    if(bar?.root) this.r.scene.add(bar.root);
+    const zState = { mesh, mixer, actions, hitboxes, bar, hp: 100, maxHp: 100, speed: 1.35, attackCooldown: 0 };
+    if(bar?.fg) this._updateHealthBar(zState);
+    this.zombies.set(key, zState);
 
     this.engine.events.emit("zm:zombieSpawn", { id: key });
     this.engine.events.emit("zm:alive", { alive: this.zombies.size });
   }
 
-  damage(id, amount, player=null){
+  damage(id, amount, player=null, distance=null){
     const key = String(id);
     const z = this.zombies.get(key);
     if(!z) return;
-    z.hp -= amount;
-    this.engine.events.emit("zm:zombieDamaged", { id, amount, player });
+    const dmg = Number(amount);
+    if(!Number.isFinite(dmg) || dmg <= 0) return;
+    z.hp -= dmg;
+    if(z.bar?.fg) this._updateHealthBar(z);
+    const playerId = (player && (player.id ?? player.name ?? player.raw?.id)) ?? null;
+    this.engine.events.emit("zm:zombieDamaged", { id, amount: dmg, player, playerId, hp: z.hp, distance });
     if(z.hp <= 0){
       this.r.scene.remove(z.mesh);
+      if(z.hitboxes?.length){
+        for(const h of z.hitboxes){
+          this.r.scene.remove(h);
+          h.geometry?.dispose?.();
+          h.material?.dispose?.();
+        }
+      }
+      if(z.bar?.root) this.r.scene.remove(z.bar.root);
       z.mesh.geometry?.dispose?.();
       z.mesh.material?.dispose?.();
+      if(z.bar?.fg?.geometry) z.bar.fg.geometry.dispose?.();
+      if(z.bar?.fg?.material) z.bar.fg.material.dispose?.();
+      if(z.bar?.bg?.geometry) z.bar.bg.geometry.dispose?.();
+      if(z.bar?.bg?.material) z.bar.bg.material.dispose?.();
       this.zombies.delete(key);
       this.engine.events.emit("zm:zombieDeath", { id, player });
       this.engine.events.emit("zm:alive", { alive: this.zombies.size });
@@ -144,12 +186,17 @@ export class ZombiesModule {
         z.mesh.traverse?.((n)=>{ if(n.isMesh) targets.push(n); });
       }
     }
-    const hits = raycaster.intersectObjects(targets, false);
+    const hits = raycaster.intersectObjects(targets, true);
     if(!hits.length) return null;
-    let mesh = hits[0].object;
-    while(mesh && mesh.userData?.entityId == null) mesh = mesh.parent;
-    const entityId = mesh?.userData?.entityId;
-    return { entityId, point: hits[0].point, distance: hits[0].distance };
+    for(const hit of hits){
+      let mesh = hit.object;
+      while(mesh && mesh.userData?.entityId == null) mesh = mesh.parent;
+      const entityId = mesh?.userData?.entityId;
+      if(entityId != null){
+        return { entityId, point: hit.point, distance: hit.distance };
+      }
+    }
+    return null;
   }
 
   _collides(x, z, radius=0.35){
@@ -188,15 +235,22 @@ export class ZombiesModule {
 
     const ppos = new THREE.Vector3();
     player.r.camera.getWorldPosition(ppos);
+    const camPos = new THREE.Vector3();
+    this.r.camera.getWorldPosition(camPos);
 
     for(const [id, z] of this.zombies){
       const m = z.mesh;
       if(z.mixer) z.mixer.update(dt);
       if(z.hitboxes?.length){
         for(const h of z.hitboxes){
+          if(h.userData?.local) continue;
           const off = h.userData.offset || { x:0, y:0, z:0 };
           h.position.set(m.position.x + off.x, m.position.y + off.y, m.position.z + off.z);
         }
+      }
+      if(z.bar?.root){
+        z.bar.root.position.set(m.position.x, m.position.y + z.bar.offsetY, m.position.z);
+        z.bar.root.lookAt(camPos);
       }
       if(z.attackCooldown > 0) z.attackCooldown = Math.max(0, z.attackCooldown - dt);
 
@@ -314,23 +368,72 @@ export class ZombiesModule {
       mesh.traverse?.((n)=>{ if(n.isMesh) box.expandByObject(n); });
       const size = new THREE.Vector3();
       box.getSize(size);
-      if(!Number.isFinite(size.x) || size.length() === 0) return null;
-      const geo = new THREE.BoxGeometry(size.x * 0.6, size.y * 0.7, size.z * 0.6);
-      const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.0 });
-      const hit = new THREE.Mesh(geo, mat);
       const center = new THREE.Vector3();
       box.getCenter(center);
-      hit.position.copy(center);
+      let height = size.y;
+      let radius = Math.min(size.x, size.z) * 0.35;
+      if(!Number.isFinite(height) || height <= 0) height = 1.8;
+      if(!Number.isFinite(radius) || radius <= 0) radius = 0.35;
+      height = Math.max(1.2, height);
+      radius = Math.max(0.25, radius);
+      const cylLen = Math.max(0.4, height - radius * 2);
+      const geo = new THREE.CapsuleGeometry(radius, cylLen, 6, 10);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.0, depthWrite: false });
+      const hit = new THREE.Mesh(geo, mat);
+      if(Number.isFinite(size.x) && size.length() > 0){
+        const localCenter = center.clone();
+        mesh.worldToLocal(localCenter);
+        hit.position.copy(localCenter);
+        hit.userData.local = true;
+      } else {
+        hit.position.set(0, 1.0, 0);
+        hit.userData.local = true;
+      }
       hit.userData.entityId = id;
       hit.userData.isHitbox = true;
-      hit.userData.offset = {
-        x: center.x - mesh.position.x,
-        y: center.y - mesh.position.y,
-        z: center.z - mesh.position.z,
-      };
       return [hit];
     } catch {
       return null;
     }
+  }
+
+  _makeHealthBar(mesh){
+    try{
+      const box = new THREE.Box3();
+      mesh.updateWorldMatrix?.(true, true);
+      mesh.traverse?.((n)=>{ if(n.isMesh) box.expandByObject(n); });
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const h = Number.isFinite(size.y) && size.y > 0 ? size.y : 1.8;
+      const offsetY = (h * 0.55) + (h * 0.5);
+
+      const width = 0.9;
+      const height = 0.12;
+      const geo = new THREE.PlaneGeometry(width, height);
+      const bgMat = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.6, depthTest: false });
+      const fgMat = new THREE.MeshBasicMaterial({ color: 0x6edb73, transparent: true, opacity: 0.9, depthTest: false });
+
+      const root = new THREE.Object3D();
+      const bg = new THREE.Mesh(geo, bgMat);
+      const fg = new THREE.Mesh(geo, fgMat);
+      bg.renderOrder = 20;
+      fg.renderOrder = 21;
+      fg.position.z = 0.01;
+      root.add(bg);
+      root.add(fg);
+
+      return { root, fg, bg, width, height, offsetY };
+    } catch {
+      return null;
+    }
+  }
+
+  _updateHealthBar(z){
+    const bar = z.bar;
+    if(!bar?.fg) return;
+    const maxHp = Math.max(1, Number(z.maxHp || 100));
+    const pct = Math.max(0, Math.min(1, (Number(z.hp) || 0) / maxHp));
+    bar.fg.scale.x = pct;
+    bar.fg.position.x = -bar.width * (1 - pct) * 0.5;
   }
 }

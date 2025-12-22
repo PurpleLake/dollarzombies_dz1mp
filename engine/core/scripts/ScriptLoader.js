@@ -46,7 +46,9 @@ export class ScriptLoader {
       ["mp:playerSpawn", ["onPlayerSpawn", "onPlayerSpawned"]],
       ["mp:playerDamaged", ["onPlayerDamaged"]],
       ["mp:playerDeath", ["onPlayerDeath"]],
+      ["mp:kill", ["onPlayerKill"]],
       ["mp:weaponFired", ["onWeaponFired"]],
+      ["mp:matchState", ["onMatchState"]],
       ["net:welcome", ["onPlayerConnect"]],
       ["mp:gameEnd", ["onGameEnd"]],
     ];

@@ -50,6 +50,14 @@ export class NameplateManager {
 
     const net = eng?.ctx?.net;
     const mode = eng?.ctx?.options?.get?.("gameMode") || "zm";
+    const hardcore = Boolean(eng?.ctx?.matchState?.tdm?.hardcore);
+
+    if(mode === "mp" && hardcore){
+      for(const plate of this.plates.values()){
+        plate.el.style.display = "none";
+      }
+      return;
+    }
 
     // determine roster source
     let roster = [];
@@ -89,7 +97,11 @@ export class NameplateManager {
         // green for teammates, red for enemies
         const team = p.team ?? null;
         if(team !== null && localTeam !== null){
-          color = (team === localTeam) ? "#34c759" : "#ff3b30";
+          if(team !== localTeam){
+            plate.el.style.display = "none";
+            continue;
+          }
+          color = "#34c759";
         } else {
           color = "#ffffff";
         }

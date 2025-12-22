@@ -277,7 +277,7 @@ function toMonacoMarkers(errors){
   return out;
 }
 
-export function DzsDevScreen({ engine, onClose }){
+export function DzsDevScreen({ engine, onClose, onChooseClass }){
   const screen = document.createElement("div");
   screen.className = "dz-screen";
   screen.style.background = "rgba(0,0,0,0.62)";
@@ -315,10 +315,12 @@ export function DzsDevScreen({ engine, onClose }){
   const spacer = document.createElement("div");
   spacer.style.flex = "1";
 
+  const classBtn = onChooseClass ? Button({ text:"Choose Class", variant:"secondary", onClick: ()=>onChooseClass?.() }) : null;
   const closeBtn = Button({ text:"Close (` or ')", variant:"secondary", onClick: ()=>onClose?.() });
 
   header.appendChild(title);
   header.appendChild(spacer);
+  if(classBtn) header.appendChild(classBtn);
   header.appendChild(closeBtn);
 
   const sub = document.createElement("div");

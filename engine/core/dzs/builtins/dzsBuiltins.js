@@ -61,6 +61,14 @@ export const BUILTIN_DOCS = Object.freeze([
   // Vars
   { name:"setVar", sig:"setVar(key, val)", desc:"Set a global script variable.", example:"setVar(powerOn, 1)" },
   { name:"getVar", sig:"getVar(key)", desc:"Get a global script variable.", example:"v = getVar(powerOn)" },
+  { name:"getScreenSize", sig:"getScreenSize()", desc:"Returns {w,h} for the current viewport.", example:"s = getScreenSize()" },
+  { name:"getLocalPlayerId", sig:"getLocalPlayerId()", desc:"Returns the local player id.", example:"pid = getLocalPlayerId()" },
+  { name:"isHost", sig:"isHost()", desc:"Returns true if this client is the host/server.", example:"if(isHost()){ ... }" },
+  { name:"getMatchState", sig:"getMatchState(key)", desc:"Returns match state (or key) synced from server.", example:"s = getMatchState(tdm)" },
+  { name:"setMatchState", sig:"setMatchState(key, val)", desc:"Host-only: merge state to server and clients.", example:"setMatchState(tdm, {scoreA:1})" },
+  { name:"sendMatchEvent", sig:"sendMatchEvent(name, payload)", desc:"Host-only: broadcast a match event to all clients.", example:"sendMatchEvent(mp:killcam, {killerId:p0})" },
+  { name:"endMatch", sig:"endMatch(reason)", desc:"Host-only: end the current match.", example:"endMatch(score_limit)" },
+  { name:"requestRespawn", sig:"requestRespawn(delayMs, spawnProtectionMs)", desc:"Request a local respawn after delay.", example:"requestRespawn(2500, 1500)" },
 
   // Audio
   { name:"playSound", sig:"playSound(player, soundId)", desc:"Play a sound (client-side).", example:"playSound(player, buy)" },
@@ -238,6 +246,43 @@ export function makeBuiltins(ctx){
       if(!dzs) return null;
       const eid = dzs._eid(ent);
       return dzs._getEntityVars?.(null, eid)?.get(String(key)) ?? null;
+    },
+    getScreenSize: ()=>({
+      w: Number(globalThis?.innerWidth || 0),
+      h: Number(globalThis?.innerHeight || 0),
+    }),
+    getLocalPlayerId: ()=> String(ctx.net?.clientId ?? "p0"),
+    isHost: ()=> dzs?.isServer?.() ?? true,
+    getMatchState: (key)=>{
+      const state = ctx.matchState || {};
+      if(key == null) return state;
+      return state[String(key)] ?? null;
+    },
+    setMatchState: (key, val)=> _serverOnly(dzs, ctx, "setMatchState", ()=>{
+      let patch = null;
+      if(key && typeof key === "object" && val === undefined){
+        patch = key;
+      } else if(key != null){
+        patch = { [String(key)]: val };
+      }
+      if(!patch) return null;
+      ctx.matchState = { ...(ctx.matchState || {}), ...patch };
+      ctx.net?.sendMatchState?.(patch);
+      ctx.events?.emit?.("mp:matchState", { state: ctx.matchState, patch });
+      return true;
+    }),
+    sendMatchEvent: (name, payload)=> _serverOnly(dzs, ctx, "sendMatchEvent", ()=>{
+      ctx.net?.sendMatchEvent?.(String(name || ""), payload ?? null);
+      return true;
+    }),
+    endMatch: (reason)=> _serverOnly(dzs, ctx, "endMatch", ()=>{
+      ctx.net?.sendEndMatch?.(reason);
+      return true;
+    }),
+    requestRespawn: (delayMs=0, spawnProtectionMs=0)=>{
+      const players = ctx.game?.players;
+      if(!players?.requestRespawn) return false;
+      return players.requestRespawn(delayMs, spawnProtectionMs);
     },
 
     // Triggers

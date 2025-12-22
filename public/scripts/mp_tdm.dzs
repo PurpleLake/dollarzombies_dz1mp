@@ -1,0 +1,218 @@
+// @name MP Team Deathmatch
+// @desc Team Deathmatch with teams, scores, timer, and killcam.
+// @version 1.0.0
+// @tags mp, mode, tdm
+
+on mp:start {
+  if(!tdmIsActive()) return;
+  tdmInitConfig();
+  tdmInitHud();
+  tdmApplyState();
+  if(isHost()){
+    if(level.tdmTimeLimit > 0){
+      level thread tdmTimer();
+    }
+  }
+}
+
+on mp:matchState {
+  if(!tdmIsActive()) return;
+  tdmInitHud();
+  tdmUpdateHud();
+}
+
+on mp:kill {
+  if(!tdmIsActive()) return;
+  if(!isHost()) return;
+  tdmHandleKill();
+}
+
+on mp:playerDeath {
+  if(!tdmIsActive()) return;
+  tdmHandleLocalDeath();
+}
+
+tdmIsActive(){
+  g = getMatchState("gamemode");
+  if(g == null) return true;
+  g = String(g).toUpperCase();
+  return (g == "TDM" || g == "MP_TDM");
+}
+
+tdmInitConfig(){
+  if(level.tdmConfigInit) return;
+  level.tdmConfigInit = true;
+  level.tdmTeamAName = "Alpha";
+  level.tdmTeamBName = "Bravo";
+  level.tdmScoreLimit = 75;
+  level.tdmFriendlyFire = false;
+  level.tdmHardcore = false;
+  level.tdmRespawnDelayMs = 2500;
+  level.tdmSpawnProtectionMs = 1500;
+  level.tdmTimeLimit = 600;
+  level.tdmAllowKillstreaks = false;
+  level.tdmMaxHp = level.tdmHardcore ? 50 : 100;
+
+  level.tdmScoreA = level.tdmScoreA || 0;
+  level.tdmScoreB = level.tdmScoreB || 0;
+  level.tdmTimeLeft = level.tdmTimeLimit;
+  level.tdmStatus = "active";
+}
+
+tdmApplyState(){
+  if(!isHost()) return;
+  state = {
+    teamAName: level.tdmTeamAName,
+    teamBName: level.tdmTeamBName,
+    scoreA: level.tdmScoreA,
+    scoreB: level.tdmScoreB,
+    scoreLimit: level.tdmScoreLimit,
+    timeRemaining: level.tdmTimeLeft,
+    friendlyFire: level.tdmFriendlyFire,
+    hardcore: level.tdmHardcore,
+    respawnDelayMs: level.tdmRespawnDelayMs,
+    spawnProtectionMs: level.tdmSpawnProtectionMs,
+    allowKillstreaks: level.tdmAllowKillstreaks,
+    maxHp: level.tdmMaxHp,
+    status: level.tdmStatus,
+    winnerName: level.tdmWinnerName,
+    lastKill: level.tdmLastKill,
+  };
+  setMatchState("gamemode", "TDM");
+  setMatchState("tdm", state);
+}
+
+tdmTimer(){
+  level endon "game_end";
+  while(true){
+    wait 1;
+    if(level.tdmStatus == "ending") threadEnd();
+    if(level.tdmTimeLeft <= 0){
+      tdmEndMatch("time_limit", tdmPickWinner());
+      threadEnd();
+    }
+    level.tdmTimeLeft = Math.max(0, level.tdmTimeLeft - 1);
+    tdmApplyState();
+  }
+}
+
+tdmPickWinner(){
+  if(level.tdmScoreA > level.tdmScoreB) return 0;
+  if(level.tdmScoreB > level.tdmScoreA) return 1;
+  return -1;
+}
+
+tdmHandleKill(){
+  if(level.tdmStatus == "ending") return;
+  killer = event.killerId;
+  victim = event.victimId;
+  if(!killer || !victim) return;
+  if(String(killer) == String(victim)) return;
+
+  kTeam = tdmTeamForPlayer(killer);
+  vTeam = tdmTeamForPlayer(victim);
+  if(kTeam == null || vTeam == null) return;
+
+  if(kTeam == vTeam){
+    if(!level.tdmFriendlyFire) return;
+    if(kTeam == 0) level.tdmScoreA = Math.max(0, level.tdmScoreA - 1);
+    else level.tdmScoreB = Math.max(0, level.tdmScoreB - 1);
+  } else {
+    if(kTeam == 0) level.tdmScoreA = level.tdmScoreA + 1;
+    else level.tdmScoreB = level.tdmScoreB + 1;
+  }
+
+  level.tdmLastKill = {
+    killerId: String(killer),
+    victimId: String(victim),
+    time: event.time,
+    weaponId: event.weaponId,
+    position: event.position,
+  };
+
+  tdmApplyState();
+
+  if(level.tdmScoreA >= level.tdmScoreLimit){
+    tdmEndMatch("score_limit", 0);
+  } else if(level.tdmScoreB >= level.tdmScoreLimit){
+    tdmEndMatch("score_limit", 1);
+  }
+}
+
+tdmEndMatch(reason, winnerTeam){
+  if(level.tdmStatus == "ending") return;
+  level.tdmStatus = "ending";
+  if(winnerTeam == 0) level.tdmWinnerName = level.tdmTeamAName;
+  else if(winnerTeam == 1) level.tdmWinnerName = level.tdmTeamBName;
+  else level.tdmWinnerName = "Draw";
+  tdmApplyState();
+
+  killcam = level.tdmLastKill || {};
+  sendMatchEvent("mp:killcam", { killerId: killcam.killerId, durationMs: 4500, lastKill: killcam });
+  wait 4.5;
+  endMatch(reason);
+}
+
+tdmHandleLocalDeath(){
+  if(level.tdmStatus == "ending") return;
+  pid = event.playerId;
+  if(!pid) return;
+  if(String(pid) != String(getLocalPlayerId())) return;
+  requestRespawn(level.tdmRespawnDelayMs, level.tdmSpawnProtectionMs);
+}
+
+tdmTeamForPlayer(pid){
+  players = getAllPlayers();
+  for(i=0;i<players.length;i++){
+    p = players[i];
+    if(!p) continue;
+    if(String(p.id) == String(pid)) return p.team;
+  }
+  return null;
+}
+
+tdmInitHud(){
+  if(level.tdmHudInit) return;
+  level.tdmHudInit = true;
+  pid = getLocalPlayerId();
+  size = getScreenSize();
+  w = 380;
+  h = 44;
+  x = Math.max(12, Math.floor((size.w - w) / 2));
+  y = 16;
+  level.tdmHudPanel = createHudItem(pid, "#ffffff", w, h, x, y, "", "");
+  setHudBackground(level.tdmHudPanel, "rgba(0,0,0,0.4)");
+  setHudZ(level.tdmHudPanel, 20);
+  level.tdmHudLeft = createHudText(pid, "#5bc0ff", x + 14, y + 12, "ALPHA 0", "");
+  level.tdmHudCenter = createHudText(pid, "#f0f5ff", x + (w / 2) - 46, y + 12, "LIMIT 0", "");
+  level.tdmHudRight = createHudText(pid, "#ff6b6b", x + w - 120, y + 12, "BRAVO 0", "");
+  tdmUpdateHud();
+}
+
+tdmUpdateHud(){
+  state = getMatchState("tdm");
+  if(!state) return;
+  teamA = String(state.teamAName || "Alpha");
+  teamB = String(state.teamBName || "Bravo");
+  scoreA = state.scoreA || 0;
+  scoreB = state.scoreB || 0;
+  limit = state.scoreLimit || 0;
+  timeLeft = state.timeRemaining || 0;
+
+  setHudText(level.tdmHudLeft, teamA.toUpperCase() + " " + scoreA);
+  setHudText(level.tdmHudRight, teamB.toUpperCase() + " " + scoreB);
+
+  if(timeLeft > 0){
+    setHudText(level.tdmHudCenter, "LIMIT " + limit + " | " + tdmFormatTime(timeLeft));
+  } else {
+    setHudText(level.tdmHudCenter, "LIMIT " + limit);
+  }
+}
+
+tdmFormatTime(sec){
+  total = Math.max(0, Math.floor(sec));
+  mins = Math.floor(total / 60);
+  secs = total - (mins * 60);
+  if(secs < 10) return mins + ":0" + secs;
+  return mins + ":" + secs;
+}

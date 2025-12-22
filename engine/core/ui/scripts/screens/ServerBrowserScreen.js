@@ -2,8 +2,14 @@ import { Button } from "../widgets/Button.js";
 
 function modeLabel(mode){
   if(mode === "zombies") return "Zombies";
+  if(mode === "mp") return "MP";
   if(mode === "solo") return "Solo";
   return mode || "Unknown";
+}
+
+function gamemodeLabel(gamemode){
+  if(!gamemode) return "-";
+  return String(gamemode).toUpperCase();
 }
 
 export function ServerBrowserScreen({ servers = [], showAll = false, onRefresh, onJoin, onBack } = {}){
@@ -64,7 +70,7 @@ export function ServerBrowserScreen({ servers = [], showAll = false, onRefresh, 
     for(const srv of items){
       const row = document.createElement("div");
       row.style.display = "grid";
-      row.style.gridTemplateColumns = "120px 120px 120px 1fr 100px 120px";
+      row.style.gridTemplateColumns = "90px 110px 110px 110px 1fr 90px 120px";
       row.style.alignItems = "center";
       row.style.gap = "10px";
       row.style.padding = "10px 12px";
@@ -79,6 +85,9 @@ export function ServerBrowserScreen({ servers = [], showAll = false, onRefresh, 
 
       const mode = document.createElement("div");
       mode.textContent = modeLabel(srv.mode);
+
+      const gamemode = document.createElement("div");
+      gamemode.textContent = gamemodeLabel(srv.gamemode);
 
       const status = document.createElement("div");
       status.textContent = srv.status || "lobby";
@@ -105,6 +114,7 @@ export function ServerBrowserScreen({ servers = [], showAll = false, onRefresh, 
 
       row.appendChild(id);
       row.appendChild(mode);
+      row.appendChild(gamemode);
       row.appendChild(status);
       row.appendChild(host);
       row.appendChild(players);

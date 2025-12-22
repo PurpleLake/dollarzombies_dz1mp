@@ -190,7 +190,7 @@ export class PlayersModule {
 
       didHit = true;
       const dmg = this._damageForDistance(this.weaponDef, hit.distance);
-      this.engine.ctx.game?.zombies?.damage(hit.entityId, dmg, this);
+      this.engine.ctx.game?.zombies?.damage(hit.entityId, dmg, this, hit.distance);
 
       // Explosive AOE on impact
       if(this.weaponDef.aoeRadius){
@@ -236,10 +236,11 @@ export class PlayersModule {
 
   _damageForDistance(def, dist){
     const r = Math.max(1, def.range);
+    const drop = Math.max(0, Math.min(1, Number(def.dropoff || 0))) * 0.6;
     if(dist <= r) return def.damage * this.damageScale;
-    const minD = def.damage * (1 - Math.max(0, Math.min(1, def.dropoff)));
+    const minD = def.damage * (1 - drop);
     const extra = Math.min(1, (dist - r) / r);
-    const base = Math.max(minD, def.damage * (1 - extra * def.dropoff));
+    const base = Math.max(minD, def.damage * (1 - extra * drop));
     return base * this.damageScale;
   }
 

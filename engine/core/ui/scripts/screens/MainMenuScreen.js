@@ -68,7 +68,7 @@ function modeCard({ title, desc, imgA, imgB, onPick }){
   return card;
 }
 
-export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode, onBrowser }){
+export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode, onBrowser, playerName="", onName }){
   const screen = document.createElement("div");
   screen.className = "dz-screen";
 
@@ -132,6 +132,21 @@ export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode,
     row.appendChild(Button({ text:"Server Browser", variant:"secondary", onClick: ()=>onBrowser?.() }));
   }
 
+  const nameRow = document.createElement("div");
+  nameRow.className = "dz-row";
+  nameRow.style.marginTop = "10px";
+  const nameLabel = document.createElement("div");
+  nameLabel.className = "dz-help";
+  nameLabel.textContent = "Username";
+  const nameInput = document.createElement("input");
+  nameInput.className = "dz-input";
+  nameInput.placeholder = "Player";
+  nameInput.maxLength = 20;
+  nameInput.value = String(playerName || "");
+  nameInput.addEventListener("input", ()=> onName?.(nameInput.value));
+  nameRow.appendChild(nameLabel);
+  nameRow.appendChild(nameInput);
+
   const hint = document.createElement("div");
   hint.className = "dz-help";
   hint.style.marginTop="8px";
@@ -141,6 +156,7 @@ export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode,
   panel.appendChild(sub);
   panel.appendChild(grid);
   panel.appendChild(row);
+  panel.appendChild(nameRow);
   panel.appendChild(hint);
 
   screen.appendChild(panel);

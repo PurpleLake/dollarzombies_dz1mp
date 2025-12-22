@@ -1,13 +1,16 @@
 const DEFAULT_GRACE_MS = 10000;
 const SOLO_MAX = 1;
 const ZOMBIES_MAX = 4;
+const MP_MAX = 8;
 
 function nowMs(){
   return Date.now();
 }
 
 function getMaxPlayers(mode){
-  return mode === "zombies" ? ZOMBIES_MAX : SOLO_MAX;
+  if(mode === "zombies") return ZOMBIES_MAX;
+  if(mode === "mp") return MP_MAX;
+  return SOLO_MAX;
 }
 
 export class MatchManager {
@@ -141,6 +144,7 @@ export class MatchManager {
       t: "lobbyState",
       matchId: match.matchId,
       mode: match.mode,
+      gamemode: match.settings?.gamemode || null,
       players,
       hostPlayerId: match.hostPlayerId,
     });
@@ -193,6 +197,7 @@ export class MatchManager {
       list.push({
         matchId: match.matchId,
         mode: match.mode,
+        gamemode: match.settings?.gamemode || null,
         status: match.status,
         playerCount: match.players.size,
         maxPlayers: getMaxPlayers(match.mode),

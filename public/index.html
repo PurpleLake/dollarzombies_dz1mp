@@ -13,6 +13,7 @@
     .bo2-panel.angled{clip-path:polygon(0 0, 96% 0, 100% 18%, 100% 100%, 0 100%)}
     .bo2-panel.angled-left{clip-path:polygon(0 0, 100% 0, 100% 100%, 4% 100%, 0 82%)}
     #bo2-top-left{position:absolute;left:18px;top:16px;display:flex;gap:10px;align-items:center}
+    #mp-top-center{position:absolute;left:50%;top:16px;transform:translateX(-50%);display:flex;gap:10px;align-items:center}
     .bo2-stat{padding:8px 10px;border-radius:6px;letter-spacing:.12em;text-transform:uppercase;font-weight:800;font-size:11px}
     .bo2-stat span{font-size:16px;letter-spacing:.04em;margin-left:6px}
     #bo2-bottom-left{position:absolute;left:18px;bottom:18px;display:grid;gap:8px}
@@ -62,6 +63,11 @@
       <div id="bo2-top-left">
         <div class="bo2-panel bo2-stat angled">Wave <span id="waveNum">0</span></div>
         <div class="bo2-panel bo2-stat angled">Alive <span id="aliveNum">0</span></div>
+      </div>
+      <div id="mp-top-center">
+        <div class="bo2-panel bo2-stat angled-left"><span id="mpTeamA">Alpha</span> <span id="mpScoreA">0</span></div>
+        <div class="bo2-panel bo2-stat angled">VS</div>
+        <div class="bo2-panel bo2-stat angled"><span id="mpTeamB">Bravo</span> <span id="mpScoreB">0</span></div>
       </div>
 
       <div id="bo2-bottom-left">

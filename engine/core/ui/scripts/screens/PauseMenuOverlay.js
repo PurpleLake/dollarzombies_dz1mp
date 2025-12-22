@@ -1,6 +1,6 @@
 import { Button } from "../widgets/Button.js";
 
-export function PauseMenuOverlay({ onResume, onSettings, onQuit }){
+export function PauseMenuOverlay({ onResume, onSettings, onQuit, onClass }){
   const screen = document.createElement("div");
   screen.className = "dz-screen";
   screen.style.background = "rgba(0,0,0,0.55)";
@@ -16,6 +16,9 @@ export function PauseMenuOverlay({ onResume, onSettings, onQuit }){
   const row = document.createElement("div");
   row.className = "dz-row";
   row.appendChild(Button({ text:"Resume", onClick: ()=>onResume?.() }));
+  if(onClass){
+    row.appendChild(Button({ text:"Choose Class", variant:"secondary", onClick: ()=>onClass?.() }));
+  }
   row.appendChild(Button({ text:"Settings", variant:"secondary", onClick: ()=>onSettings?.() }));
   row.appendChild(Button({ text:"Quit to Menu", variant:"secondary", onClick: ()=>onQuit?.() }));
 

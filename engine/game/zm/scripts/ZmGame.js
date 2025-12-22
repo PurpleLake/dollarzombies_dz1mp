@@ -79,6 +79,7 @@ export class ZmGame {
     this.engine.events.emit("zm:build", {});
     this.engine.events.emit("zm:start", {});
     this.engine.events.emit("zm:playerSpawn", { player: this.players });
+    this._ensureDefaultWorld();
 
 // Game end bridge
 const offEnd = this.engine.events.on("zm:playerDeath", (e)=>{
@@ -106,5 +107,16 @@ const offEnd = this.engine.events.on("zm:playerDeath", (e)=>{
       try { this.engine.ctx.canvas.removeEventListener("click", this._onCanvasClick); } catch {}
     }
     this._onCanvasClick = null;
+  }
+
+  _ensureDefaultWorld(){
+    const world = this.world;
+    if(!world) return;
+    if(!world.floor) world.addFloor(60);
+    if(!Array.isArray(world.lights) || world.lights.length === 0){
+      world.addLight({ type: "ambient", color: 0x52637a, intensity: 0.45 });
+      world.addLight({ type: "directional", color: 0xffffff, intensity: 0.95, position: { x: -8, y: 12, z: 6 }, castShadow: true });
+      world.addLight({ type: "point", color: 0xffc68a, intensity: 0.65, position: { x: 0, y: 4, z: 0 }, castShadow: false });
+    }
   }
 }

@@ -30,11 +30,15 @@ import { QueueScreen } from "/engine/core/ui/scripts/screens/QueueScreen.js";
 import { ServerBrowserScreen } from "/engine/core/ui/scripts/screens/ServerBrowserScreen.js";
 import { HudSystem } from "/engine/core/ui/scripts/HudSystem.js";
 import { ZmGameOverScreen } from "/engine/core/ui/scripts/screens/ZmGameOverScreen.js";
+import { MpModeSelectScreen } from "/engine/core/ui/scripts/screens/MpModeSelectScreen.js";
+import { MpMatchResultsScreen } from "/engine/core/ui/scripts/screens/MpMatchResultsScreen.js";
+import { MpClassScreen } from "/engine/core/ui/scripts/screens/MpClassScreen.js";
 import { DevModule } from "/engine/game/zm/dev/scripts/DevModule.js";
 import { zmMaps, getZmMap } from "/engine/game/zm/maps/MapRegistry.js";
 import { mpMaps, getMpMap } from "/engine/game/mp/maps/MapRegistry.js";
 import { LobbyController } from "/engine/core/scripts/lobby/LobbyController.js";
 import { MapCompiler } from "/engine/tools/map_editor/MapCompiler.js";
+import { mpGamemodes, getMpGamemode } from "/engine/game/mp/scripts/GamemodeRegistry.js";
 
 // Debug log (bottom-left)
 const logEl = document.getElementById("log");
@@ -53,6 +57,15 @@ const hpNum = document.getElementById("hpNum");
   const cashNum = document.getElementById("cashNum");
 const weaponName = document.getElementById("weaponName");
 const ammoText = document.getElementById("ammoText");
+const bo2Hud = document.getElementById("bo2-hud");
+const mpTeamA = document.getElementById("mpTeamA");
+const mpTeamB = document.getElementById("mpTeamB");
+const mpScoreA = document.getElementById("mpScoreA");
+const mpScoreB = document.getElementById("mpScoreB");
+const mpTopCenter = document.getElementById("mp-top-center");
+const bo2TopLeft = document.getElementById("bo2-top-left");
+const bo2BottomLeft = document.getElementById("bo2-bottom-left");
+const crosshair = document.getElementById("crosshair");
 
 // Engine UI root + theme + options
 const uiRoot = new UIRoot();
@@ -62,6 +75,15 @@ const options = new OptionsStore();
 function setUiMode(mode){
   const next = (mode === "zm_solo") ? "zm" : (mode || "zm");
   if(uiRoot?.el) uiRoot.el.dataset.uiMode = next;
+}
+
+function setHudVisibility(mode){
+  if(bo2Hud) bo2Hud.style.display = "";
+  const isMp = mode === "mp";
+  if(bo2TopLeft) bo2TopLeft.style.display = isMp ? "none" : "";
+  if(bo2BottomLeft) bo2BottomLeft.style.display = isMp ? "none" : "";
+  if(mpTopCenter) mpTopCenter.style.display = isMp ? "" : "none";
+  if(crosshair) crosshair.style.display = "";
 }
 
 // Move HUD under engine-owned HUD layer
@@ -80,10 +102,12 @@ engine.ctx.uiRoot = uiRoot;
 engine.ctx.theme = theme;
 engine.ctx.options = options;
 engine.ctx.menu = menu;
+engine.ctx.matchState = {};
 
 // Networking (WS) - used by Zombies (4p co-op) and Multiplayer (6v6)
 const wsUrl = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws";
 engine.ctx.net = new NetClient({ url: wsUrl, engine, desiredMode: options.get("gameMode") || "zm" });
+engine.ctx.net.name = options.get("playerName") || engine.ctx.net.name;
 engine.ctx.net.connect();
 
 // Core subsystems
@@ -157,6 +181,11 @@ engine.events.on("log", ({ msg }) => uiLog(msg));
 engine.events.on("zm:wave", ({ wave }) => { if(waveNum) waveNum.textContent = String(wave); });
 engine.events.on("zm:alive", ({ alive }) => { if(aliveNum) aliveNum.textContent = String(alive); });
 engine.events.on("player:hp", ({ hp }) => { if(hpNum) hpNum.textContent = String(Math.max(0, Math.floor(hp))); });
+engine.events.on("mp:playerDamaged", ({ hp }) => { if(hpNum && hp != null) hpNum.textContent = String(Math.max(0, Math.floor(hp))); });
+engine.events.on("mp:playerSpawn", ()=>{
+  const maxHp = Number(engine.ctx.matchState?.tdm?.maxHp ?? 100);
+  if(hpNum) hpNum.textContent = String(Math.max(0, Math.floor(maxHp)));
+});
 engine.events.on("zm:zombieDeath", () => { zmStats.kills += 1; });
 engine.events.on("zm:playerDeath", () => { zmStats.downs += 1; });
 
@@ -170,16 +199,30 @@ engine.events.on("weapon:reloadEnd", ({ clip, reserve }) => {
   if(ammoText) ammoText.textContent = ` ${clip}/${reserve}`;
 });
 
+engine.events.on("mp:matchState", ({ state })=>{
+  const tdm = state?.tdm || {};
+  if(mpTeamA) mpTeamA.textContent = String(tdm.teamAName || "Alpha");
+  if(mpTeamB) mpTeamB.textContent = String(tdm.teamBName || "Bravo");
+  if(mpScoreA) mpScoreA.textContent = String(tdm.scoreA ?? 0);
+  if(mpScoreB) mpScoreB.textContent = String(tdm.scoreB ?? 0);
+  if(hpNum && tdm.maxHp != null){
+    const cur = Number(hpNum.textContent || tdm.maxHp);
+    if(cur > tdm.maxHp) hpNum.textContent = String(tdm.maxHp);
+  }
+});
+
 // Scripts + game
 const scripts = new ScriptLoader({ engine });
 engine.ctx.dzsStudio = new DzsScriptManager({ runtime: scripts.dzs, events: engine.events });
 let game = null;
+let mpClassPrompted = false;
 
 const initialMode = options.get("gameMode") || "zm";
 const defaultZm = getZmMap(options.get("zmMap"));
 const defaultMp = getMpMap(options.get("mpMap"));
 const session = engine.ctx.session = {
   mode: initialMode,
+  mpGamemode: options.get("mpGamemode") || "TDM",
   mapSelections: { zm: defaultZm.id, mp: defaultMp.id },
   mapId: initialMode === "mp" ? defaultMp.id : defaultZm.id,
 };
@@ -198,16 +241,22 @@ const matchSession = engine.ctx.matchSession = {
   matchId: null,
   matchMode: null,
   hostPlayerId: null,
+  matchGamemode: null,
 };
 
 const zmStats = engine.ctx.zmStats = { kills: 0, downs: 0 };
 
 function uiModeToMatch(mode){
-  return mode === "zm" ? "zombies" : "solo";
+  if(mode === "zm") return "zombies";
+  if(mode === "mp") return "mp";
+  return "solo";
 }
 
 function matchModeToUi(mode){
-  return mode === "zombies" ? "zm" : "mp";
+  if(mode === "zombies") return "zm";
+  if(mode === "mp") return "mp";
+  if(mode === "solo") return "mp";
+  return "mp";
 }
 
 function setClientState(next){
@@ -268,14 +317,17 @@ engine.events.on("queue:status", ({ mode, queuedCount })=>{
   queueView.setStatus?.(`In queue: ${queuedCount} player${queuedCount === 1 ? "" : "s"}`);
 });
 
-engine.events.on("match:found", ({ matchId, mode, hostPlayerId })=>{
+engine.events.on("match:found", ({ matchId, mode, hostPlayerId, gamemode })=>{
   matchSession.matchId = String(matchId);
   matchSession.matchMode = mode;
+  matchSession.matchGamemode = gamemode || null;
   matchSession.hostPlayerId = hostPlayerId || null;
+  engine.ctx.matchState = { gamemode: gamemode || null };
   const uiMode = matchModeToUi(mode);
   session.mode = uiMode;
   setUiMode(session.mode);
   session.mapId = resolveMapIdForMode(uiMode);
+  if(matchSession.matchGamemode) session.mpGamemode = matchSession.matchGamemode;
   showLobby(uiMode);
 });
 
@@ -283,7 +335,9 @@ engine.events.on("match:lobbyState", (payload)=>{
   if(!payload?.matchId) return;
   matchSession.matchId = String(payload.matchId);
   matchSession.matchMode = payload.mode || matchSession.matchMode;
+  matchSession.matchGamemode = payload.gamemode || matchSession.matchGamemode;
   matchSession.hostPlayerId = payload.hostPlayerId || matchSession.hostPlayerId;
+  if(payload.gamemode) session.mpGamemode = payload.gamemode;
 });
 
 engine.events.on("match:started", ({ matchId })=>{
@@ -298,9 +352,16 @@ engine.events.on("match:ended", ({ matchId, reason })=>{
   matchSession.matchId = null;
   matchSession.matchMode = null;
   matchSession.hostPlayerId = null;
+  matchSession.matchGamemode = null;
   destroyCurrentGame();
-  showMainMenu();
-  if(reason) menu.toast(`Match ended: ${reason}`);
+  const lastMode = session.mode;
+  const lastState = engine.ctx.matchState;
+  if(lastMode === "mp" && lastState?.tdm){
+    showMpMatchResults({ reason, state: lastState });
+  } else {
+    showMainMenu();
+    if(reason) menu.toast(`Match ended: ${reason}`);
+  }
 });
 
 engine.events.on("match:joinFailed", ({ reason })=>{
@@ -352,6 +413,7 @@ function destroyCurrentGame(){
   engine.ctx.worldBuilder = null;
   engine.ctx.map = null;
   engine.ctx.players = [];
+  mpClassPrompted = false;
   resetEcs();
 }
 
@@ -438,6 +500,7 @@ async function startGame(modeOverride){
     options.set("gameMode", mode);
     if(mode === "mp") options.set("mpMap", mapDef.id);
     else options.set("zmMap", mapDef.id);
+    if(mode === "mp") options.set("mpGamemode", session.mpGamemode || "TDM");
     engine.ctx.net?.setMode?.(mode);
 
     destroyCurrentGame();
@@ -461,15 +524,36 @@ async function startGame(modeOverride){
     }
     if(!engine.loop.running) engine.start();
     engine.ctx.timeScale = 1;
-    menu.setScreen(null);
-    menu.setOverlay(null);
-    menu.showHud(true);
-    setClientState(ClientState.IN_MATCH);
-  } catch (err){
+      menu.setScreen(null);
+      menu.setOverlay(null);
+      menu.showHud(true);
+      setHudVisibility(mode);
+      setClientState(ClientState.IN_MATCH);
+      if(mode === "mp" && !mpClassPrompted){
+        mpClassPrompted = true;
+        showMpClassSelect({ initial:true });
+      }
+    } catch (err){
     uiLog('[scripts] ERROR: ' + (err?.stack || err));
     menu.toast('Script load failed (see log)');
     throw err;
   }
+}
+
+function showMpClassSelect({ initial=false, returnToPause=false } = {}){
+  if(document.pointerLockElement) document.exitPointerLock();
+  if(initial) engine.ctx.timeScale = 0;
+  menu.setScreen(null);
+  menu.setOverlay(MpClassScreen({
+    engine,
+    onBack: ()=>{
+      if(returnToPause) showPauseOverlay();
+      else {
+        engine.ctx.timeScale = 1;
+        menu.setOverlay(null);
+      }
+    },
+  }));
 }
 
 
@@ -491,7 +575,9 @@ function showSettings({ overlay=false } = {}){
 
 function showQueue(mode=session.mode){
   setUiMode(mode);
-  const label = mode === "mp" ? "Solo" : (mode === "zm_solo" ? "Zombies (Solo)" : "Zombies");
+  const label = mode === "mp"
+    ? `Multiplayer (${session.mpGamemode || "TDM"})`
+    : (mode === "zm_solo" ? "Zombies (Solo)" : "Zombies");
   const view = QueueScreen({
     modeLabel: label,
     onCancel: ()=> leaveQueueToMenu(),
@@ -509,10 +595,16 @@ function queueForMode(mode){
     startGame("zm_solo");
     return;
   }
+  if(session.mode === "mp"){
+    const g = getMpGamemode(session.mpGamemode || "TDM");
+    session.mpGamemode = g?.id || "TDM";
+    options.set("mpGamemode", session.mpGamemode);
+  }
   session.mapId = resolveMapIdForMode(session.mode);
   matchSession.matchMode = uiModeToMatch(session.mode);
   matchSession.matchId = null;
   matchSession.hostPlayerId = null;
+  matchSession.matchGamemode = session.mode === "mp" ? session.mpGamemode : null;
   setClientState(ClientState.QUEUEING);
   showQueue(session.mode);
   engine.ctx.net?.sendQueueJoin?.(matchSession.matchMode);
@@ -568,6 +660,26 @@ function showMapSelect(mode="zm"){
   }));
 }
 
+function showMpModeSelect(){
+  session.mode = "mp";
+  setUiMode(session.mode);
+  const pick = getMpGamemode(session.mpGamemode || "TDM");
+  const selectedId = pick?.id || "TDM";
+  menu.showHud(false);
+  menu.setOverlay(null);
+  menu.setScreen(MpModeSelectScreen({
+    modes: mpGamemodes,
+    selectedId,
+    onSelect: (id)=>{
+      const gm = getMpGamemode(id);
+      session.mpGamemode = gm?.id || "TDM";
+      options.set("mpGamemode", session.mpGamemode);
+    },
+    onBack: ()=> showMainMenu(),
+    onContinue: ()=> queueForMode("mp"),
+  }));
+}
+
 function showServerBrowser(){
   setUiMode(session.mode);
   const view = ServerBrowserScreen({
@@ -618,16 +730,22 @@ function showClassSelect({ returnToLobby=false } = {}){
 function showMainMenu(){
   setClientState(ClientState.MENU);
   engine.ctx.net?.setMode?.("idle");
+  engine.ctx.matchState = {};
   setUiMode(session.mode);
   menu.showHud(false);
   menu.setOverlay(null);
   menu.setScreen(MainMenuScreen({
     mode: session.mode,
-    onMode: (m)=> queueForMode(m),
-    onPlay: ()=> queueForMode(session.mode),
+    onMode: (m)=> m === "mp" ? showMpModeSelect() : queueForMode(m),
+    onPlay: ()=> session.mode === "mp" ? showMpModeSelect() : queueForMode(session.mode),
     onClass: ()=> showClassSelect(),
     onBrowser: ()=> showServerBrowser(),
     onSettings: ()=> showSettings({ overlay:false }),
+    playerName: options.get("playerName"),
+    onName: (name)=>{
+      options.set("playerName", name);
+      engine.ctx.net?.setName?.(name);
+    },
   }));
 }
 
@@ -638,6 +756,7 @@ function showPauseOverlay(){
     onResume: ()=> resumeFromPause(),
     onSettings: ()=> showSettings({ overlay:true }),
     onQuit: ()=> exitToMenu(),
+    onClass: session.mode === "mp" ? ()=> showMpClassSelect({ returnToPause:true }) : null,
   }));
 }
 
@@ -687,6 +806,17 @@ function showZmGameOver(){
   }));
 }
 
+function showMpMatchResults({ reason=null, state=null } = {}){
+  engine.ctx.timeScale = 1;
+  menu.showHud(false);
+  menu.setScreen(null);
+  menu.setOverlay(MpMatchResultsScreen({
+    reason,
+    state,
+    onContinue: ()=> showMainMenu(),
+  }));
+}
+
 // Pause toggle (Esc)
 engine.events.on("menu:togglePause", ()=>{
   const inGame = (menu.screenEl === null); // if no full screen menu, assume in-game
@@ -696,6 +826,11 @@ engine.events.on("menu:togglePause", ()=>{
 });
 
 engine.events.on("zm:gameEnd", ()=> showZmGameOver());
+
+engine.events.on("menu:chooseClass", ()=>{
+  if(session.mode !== "mp") return;
+  showMpClassSelect({ returnToPause: false });
+});
 
 
 // Keep ammo UI fresh

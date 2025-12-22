@@ -4,6 +4,7 @@ import { clamp } from "../../../../core/utilities/Math.js";
 import { jitterDirection } from "../../../../core/weapons/utilities/WeaponMath.js";
 
 import * as THREE from "https://unpkg.com/three@0.161.0/build/three.module.js";
+import { GLTFLoader } from "https://unpkg.com/three@0.161.0/examples/jsm/loaders/GLTFLoader.js";
 
 function degToRad(d){
   return (Number(d || 0) * Math.PI) / 180;
@@ -46,7 +47,16 @@ export class MpPlayersModule {
     this.remotes = new Map();
 
     this._spawned = false;
+    this._dead = false;
+    this._respawnAt = 0;
+    this._spawnProtectionMs = 0;
+    this._frozen = false;
+    this._spectateTargetId = null;
+    this._killcamEndAt = 0;
     this._weaponInv = null; // id -> mesh group
+    this.weaponLoader = new GLTFLoader();
+    this.weaponCache = new Map(); // url -> scene
+    this.weaponPending = new Map(); // url -> Promise
   }
 
   _ensureRemote(p){
@@ -61,8 +71,71 @@ export class MpPlayersModule {
 
     this.renderer.scene.add(g);
     g.userData._remoteId = String(p.id);
+    g.userData._weaponId = null;
+    g.userData._weaponObj = null;
     this.remotes.set(p.id, g);
     return g;
+  }
+
+  _weaponFallback(){
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(0.35, 0.08, 0.2),
+      new THREE.MeshStandardMaterial({ color: 0x2b2f36, roughness: 0.6, metalness: 0.2 })
+    );
+    body.position.set(0.12, 1.05, -0.12);
+    g.add(body);
+    return g;
+  }
+
+  async _getWeaponScene(url){
+    const key = String(url);
+    if(this.weaponCache.has(key)) return this.weaponCache.get(key);
+    if(this.weaponPending.has(key)) return this.weaponPending.get(key);
+    const p = new Promise((resolve)=> {
+      this.weaponLoader.load(key, (gltf)=>{
+        const scene = gltf.scene || gltf.scenes?.[0] || null;
+        if(scene) this.weaponCache.set(key, scene);
+        resolve(scene || null);
+      }, undefined, ()=> resolve(null));
+    });
+    this.weaponPending.set(key, p);
+    const res = await p;
+    this.weaponPending.delete(key);
+    return res;
+  }
+
+  async _applyRemoteWeapon(g, weaponId){
+    if(!g) return;
+    const nextId = weaponId ? String(weaponId) : null;
+    if(g.userData._weaponId === nextId) return;
+    if(g.userData._weaponObj){
+      try { g.remove(g.userData._weaponObj); } catch {}
+      g.userData._weaponObj = null;
+    }
+    g.userData._weaponId = nextId;
+    if(!nextId){
+      return;
+    }
+
+    const def = this.engine.ctx.weapons?.get?.(nextId) || null;
+    const modelUrl = def?.model || def?.modelPath || null;
+    if(!modelUrl){
+      const fallback = this._weaponFallback();
+      g.add(fallback);
+      g.userData._weaponObj = fallback;
+      return;
+    }
+
+    const scene = await this._getWeaponScene(modelUrl);
+    if(!scene || g.userData._weaponId !== nextId) return;
+    const obj = scene.clone(true);
+    obj.traverse?.((n)=>{ if(n.isMesh){ n.castShadow = true; n.receiveShadow = false; } });
+    obj.scale.setScalar(0.6);
+    obj.position.set(0.2, 1.0, -0.1);
+    obj.rotation.set(0, Math.PI, 0);
+    g.add(obj);
+    g.userData._weaponObj = obj;
   }
 
   _cleanupRemoteIds(activeIds){
@@ -74,6 +147,7 @@ export class MpPlayersModule {
   }
 
 tryShoot(){
+  if(this._frozen || this._dead || this._spectateTargetId) return false;
   const def = this.weaponCtrl.weaponDef || this.weaponCtrl.currentDef || this.weaponCtrl.getCurrentDef?.();
   const weapon = this.weaponCtrl.weapon;
   if(!def || !weapon) return false;
@@ -130,16 +204,24 @@ tryShoot(){
   }
 
   if(bestHit?.rid && totalDamage > 0 && net?.connected){
-    net._send({ t:"hit", targetId: bestHit.rid, amount: totalDamage });
+    net._send({ t:"hit", targetId: bestHit.rid, amount: totalDamage, weaponId: def.id });
   }
 
   return true;
 }
 
   tick(dt){
-if(!this._spawned){
+const now = performance.now();
+const net = this.engine.ctx.net;
+if(this._killcamEndAt && now >= this._killcamEndAt){
+  this.stopKillcam();
+}
+if(this._dead && now >= this._respawnAt){
+  this._dead = false;
+  this._spawned = false;
+}
+if(!this._spawned && !this._dead){
   this._spawned = true;
-  const net = this.engine.ctx.net;
   const team = net?.team ?? 0;
   const map = this.engine.ctx.map || {};
   const spawns = (team===0 ? map.mpSpawnsTeam0 : map.mpSpawnsTeam1) || [];
@@ -162,40 +244,44 @@ if(!this._spawned){
       this.weaponDef = this.weaponCtrl.weaponDef;
       this.weapon = this.weaponCtrl.weapon;
 
-
   this.engine.events.emit("mp:playerSpawn", { playerId: net?.clientId, team, class: this._weaponInv });
   this.engine.ctx.notifications?.notify?.({ id: net?.clientId, name: net?.name }, `^4MP^7 Spawned as ^2${this._weaponInv.name}^7`, { bold:false });
+  this.engine.ctx.net?.sendPlayerSpawned?.({ playerId: net?.clientId, team, pos: s });
 }
 
     const md = this.input.consumeMouseDelta?.() || { dx:0, dy:0 };
-    if(this.input.mouse?.locked){
+    if(this.input.mouse?.locked && !this._frozen && !this._dead && !this._spectateTargetId){
       this.yaw -= md.dx * (this.input.mouse.sensitivity || 0.0022);
       this.pitch = clamp(this.pitch - md.dy * (this.input.mouse.sensitivity || 0.0022), -1.4, 1.4);
     }
     this.cam.rotation.set(this.pitch, this.yaw, 0, "YXZ");
 
     // Basic WASD movement
-    const speed = 4.8;
-    const fwd = (this.input.isDown?.("KeyW") ? 1 : 0) - (this.input.isDown?.("KeyS") ? 1 : 0);
-    const str = (this.input.isDown?.("KeyD") ? 1 : 0) - (this.input.isDown?.("KeyA") ? 1 : 0);
+    if(!this._frozen && !this._dead && !this._spectateTargetId){
+      const speed = 4.8;
+      const fwd = (this.input.isDown?.("KeyW") ? 1 : 0) - (this.input.isDown?.("KeyS") ? 1 : 0);
+      const str = (this.input.isDown?.("KeyD") ? 1 : 0) - (this.input.isDown?.("KeyA") ? 1 : 0);
 
-    this.move.set(str, 0, -fwd);
-    if(this.move.lengthSq()>0) this.move.normalize();
+      this.move.set(str, 0, -fwd);
+      if(this.move.lengthSq()>0) this.move.normalize();
 
-    const dir = new THREE.Vector3(this.move.x,0,this.move.z);
-    dir.applyAxisAngle(new THREE.Vector3(0,1,0), this.yaw);
-    const next = this.cam.position.clone().addScaledVector(dir, speed*dt);
-    if(!this._collides(next.x, next.z)){
-      this.cam.position.copy(next);
+      const dir = new THREE.Vector3(this.move.x,0,this.move.z);
+      dir.applyAxisAngle(new THREE.Vector3(0,1,0), this.yaw);
+      const next = this.cam.position.clone().addScaledVector(dir, speed*dt);
+      if(!this._collides(next.x, next.z)){
+        this.cam.position.copy(next);
+      }
+    } else if(this._spectateTargetId){
+      if(!this._applyKillcamView(net)) this.stopKillcam();
     }
 
     this._shootCooldown = Math.max(0, this._shootCooldown - dt);
-    if(this.input.isDown?.("KeyR")){
+    if(this.input.isDown?.("KeyR") && !this._frozen && !this._dead && !this._spectateTargetId){
       if(this.weaponCtrl.requestReload()) this.viewModel?.triggerReload?.();
     }
-    this.weaponCtrl.tick(dt);
+    if(!this._spectateTargetId) this.weaponCtrl.tick(dt);
 
-    if(this._fireHeld && this.input.mouse?.locked){
+    if(this._fireHeld && this.input.mouse?.locked && !this._frozen && !this._dead && !this._spectateTargetId){
       this.tryShoot();
     }
 
@@ -213,10 +299,12 @@ if(!this._spawned){
     this.weapon = this.weaponCtrl.weapon;
     this.viewModel.tick(dt, this.input);
 
-    this.engine.ctx.net?.sendLocalSnapshot?.({ pos, rot, hp:100, weaponId: cur?.id ?? null });
+    if(!this._spectateTargetId && !this._dead){
+      this.engine.ctx.net?.sendLocalSnapshot?.({ pos, rot, hp:100, weaponId: cur?.id ?? null });
+    }
 
     // Update remotes from net state
-    const net = this.engine.ctx.net;
+    // net already resolved above
     const active = new Set();
     if(net?.players){
       for(const p of net.players.values()){
@@ -226,6 +314,9 @@ if(!this._spawned){
         if(p.pos){
           g.position.set(p.pos.x||0, (p.pos.y||0)-1.7, p.pos.z||0);
         }
+        if(p.weaponId != null){
+          this._applyRemoteWeapon(g, p.weaponId);
+        }
       }
       this._cleanupRemoteIds(active);
     }
@@ -233,10 +324,11 @@ if(!this._spawned){
 
   _damageForDistance(def, dist){
     const r = Math.max(1, def.range);
+    const drop = Math.max(0, Math.min(1, Number(def.dropoff || 0))) * 0.6;
     if(dist <= r) return def.damage;
-    const minD = def.damage * (1 - Math.max(0, Math.min(1, def.dropoff)));
+    const minD = def.damage * (1 - drop);
     const extra = Math.min(1, (dist - r) / r);
-    return Math.max(minD, def.damage * (1 - extra * def.dropoff));
+    return Math.max(minD, def.damage * (1 - extra * drop));
   }
 
   _collides(x, z, radius=0.35){
@@ -267,6 +359,48 @@ if(!this._spawned){
       }
     }
     return false;
+  }
+
+  requestRespawn(delayMs=0, spawnProtectionMs=0){
+    this._dead = true;
+    this._respawnAt = performance.now() + Math.max(0, Number(delayMs || 0));
+    this._spawnProtectionMs = Math.max(0, Number(spawnProtectionMs || 0));
+    this._fireHeld = false;
+    return true;
+  }
+
+  setFrozen(frozen=true){
+    this._frozen = !!frozen;
+    if(this._frozen) this._fireHeld = false;
+  }
+
+  startKillcam({ killerId=null, durationMs=4500 } = {}){
+    const targetId = killerId != null ? String(killerId) : null;
+    if(!targetId) return false;
+    this._spectateTargetId = targetId;
+    this._killcamEndAt = performance.now() + Math.max(0, Number(durationMs || 0));
+    this.setFrozen(true);
+    return true;
+  }
+
+  stopKillcam(){
+    this._spectateTargetId = null;
+    this._killcamEndAt = 0;
+    this.setFrozen(false);
+  }
+
+  _applyKillcamView(net){
+    if(!net?.players || !this._spectateTargetId) return false;
+    const target = net.players.get(this._spectateTargetId);
+    if(!target?.pos) return false;
+    const pos = target.pos;
+    this.cam.position.set(pos.x || 0, pos.y || 1.7, pos.z || 0);
+    if(target.rot){
+      this.yaw = Number(target.rot.yaw ?? this.yaw);
+      this.pitch = Number(target.rot.pitch ?? this.pitch);
+      this.cam.rotation.set(this.pitch, this.yaw, 0, "YXZ");
+    }
+    return true;
   }
 
   dispose(){

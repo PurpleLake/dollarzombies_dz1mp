@@ -1,0 +1,36 @@
+// @name MP Debug HUD
+// @desc Debug HUD for MP match state, damage, and kills.
+// @version 1.0.0
+// @tags mp, debug, hud
+
+on mp:start {
+  level.mpDebugHud = createHudItem(getLocalPlayerId(), "#9ad7ff", 520, 46, 20, 120, "MP debug", "")
+  setHudBackground(level.mpDebugHud, "rgba(0,0,0,0.45)")
+}
+
+on mp:matchState {
+  if(!level.mpDebugHud) return;
+  t = event.state ? event.state.tdm : null
+  if(!t) return;
+  text = "A " + (t.teamAName||"A") + ":" + (t.scoreA||0) + " | B " + (t.teamBName||"B") + ":" + (t.scoreB||0)
+  setHudText(level.mpDebugHud, text)
+}
+
+on mp:playerDamaged {
+  if(!level.mpDebugHud) return;
+  dmg = event.amount || 0
+  hp = event.hp || 0
+  setHudText(level.mpDebugHud, "DMG " + dmg + " | HP " + hp)
+}
+
+on mp:kill {
+  if(!level.mpDebugHud) return;
+  killer = event.killerId || "?"
+  victim = event.victimId || "?"
+  setHudText(level.mpDebugHud, "KILL " + killer + " -> " + victim)
+}
+
+on mp:gameEnd {
+  if(level.mpDebugHud) removeHud(level.mpDebugHud)
+  level.mpDebugHud = null
+}

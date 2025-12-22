@@ -78,7 +78,7 @@ export class WorldBuilder {
     return mesh;
   }
 
-  addCrate({ x=0, y=0.5, z=0, size=1, color=0x6a4a2c } = {}){
+  addCrate({ x=0, y=0.5, z=0, size=1, color=0x2a8a3a } = {}){
     return this.addWallBox({ width:size, height:size, depth:size, x, y: y ?? size/2, z, color });
   }
 

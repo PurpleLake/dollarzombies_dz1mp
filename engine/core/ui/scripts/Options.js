@@ -12,6 +12,8 @@ export class OptionsStore {
       zmActiveClass: 0,
       zmMap: "zm_facility",
       mpMap: "mp_arena",
+      mpGamemode: "TDM",
+      playerName: "",
       mpClasses: [
         { name:"Assault", primary:"ar_m4", secondary:"glock_19", frag:"Frag", perks:["Perk 1","Perk 2","Perk 3"] },
         { name:"SMG Rush", primary:"smg_mp5", secondary:"p_1911", frag:"Frag", perks:["Perk 1","Perk 2","Perk 3"] },

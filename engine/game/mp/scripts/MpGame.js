@@ -34,6 +34,16 @@ export class MpGame {
     // Systems
     engine.ecs.use((dt, ecs, ctx)=>this.tick(dt, ecs, ctx));
     engine.ecs.use((dt, ecs, ctx)=>this.renderTick(dt, ecs, ctx));
+
+    this._unsubs.push(engine.events.on("mp:killcam", (payload)=>{
+      this.players?.startKillcam?.({
+        killerId: payload?.killerId ?? payload?.lastKill?.killerId,
+        durationMs: payload?.durationMs ?? 4500,
+      });
+    }));
+    this._unsubs.push(engine.events.on("mp:matchState", ({ state })=>{
+      this.applyMatchState(state);
+    }));
   }
 
   applySpawnPoints(spawnPoints={}){
@@ -56,6 +66,8 @@ export class MpGame {
     this.engine.events.emit("mp:preload", {});
     this.engine.events.emit("mp:build", {});
     this.engine.events.emit("mp:start", {});
+    this._ensureDefaultWorld();
+    this.applyMatchState(this.engine.ctx.matchState || {});
     const offNet = this.engine.events.on("net:close", ()=>{
       this.engine.events.emit("mp:gameEnd", { reason:"netClose" });
     });
@@ -72,6 +84,12 @@ export class MpGame {
     this.renderer.render(dt);
   }
 
+  applyMatchState(state){
+    const tdm = state?.tdm || {};
+    const frozen = Boolean(tdm.frozen || tdm.status === "ending");
+    this.players?.setFrozen?.(frozen);
+  }
+
   dispose(){
     try { this.players?.dispose?.(); } catch {}
     try { this.input?.dispose?.(); } catch {}
@@ -84,5 +102,16 @@ export class MpGame {
       try { this.engine.ctx.canvas.removeEventListener("click", this._onCanvasClick); } catch {}
     }
     this._onCanvasClick = null;
+  }
+
+  _ensureDefaultWorld(){
+    const world = this.world;
+    if(!world) return;
+    if(!world.floor) world.addFloor(70);
+    if(!Array.isArray(world.lights) || world.lights.length === 0){
+      world.addLight({ type: "ambient", color: 0x52637a, intensity: 0.45 });
+      world.addLight({ type: "directional", color: 0xffffff, intensity: 0.95, position: { x: 6, y: 14, z: -6 }, castShadow: true });
+      world.addLight({ type: "point", color: 0xffc68a, intensity: 0.65, position: { x: 0, y: 4, z: 0 }, castShadow: false });
+    }
   }
 }

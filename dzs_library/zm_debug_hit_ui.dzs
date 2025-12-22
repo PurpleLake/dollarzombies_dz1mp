@@ -1,0 +1,43 @@
+// @name ZM Debug Hit UI
+// @desc Shows zombie hit details (player id, entity id, damage, range, hp).
+// @version 1.0.0
+// @tags zombies, debug, ui
+
+on onGameStart {
+  level.debugHud = createHudItem(getLocalPlayerId(), "#9ad7ff", 520, 46, 20, 120, "Zombie hit debug", "")
+  setHudBackground(level.debugHud, "rgba(0,0,0,0.45)")
+}
+
+on onZombieDamaged {
+  if(!level.debugHud){
+    level.debugHud = createHudItem(getLocalPlayerId(), "#9ad7ff", 520, 46, 20, 120, "Zombie hit debug", "")
+    setHudBackground(level.debugHud, "rgba(0,0,0,0.45)")
+  }
+  pid = getLocalPlayerId()
+  if(event){
+    if(event.playerId){ pid = event.playerId }
+  }
+  zid = "?"
+  if(event){
+    if(event.id){ zid = event.id }
+  }
+  dmg = 0
+  if(event){
+    if(event.amount){ dmg = Math.round(event.amount * 10) / 10 }
+  }
+  rng = 0
+  if(event){
+    if(event.distance){ rng = Math.round(event.distance * 10) / 10 }
+  }
+  hp = 0
+  if(event){
+    if(event.hp){ hp = Math.max(0, Math.round(event.hp)) }
+  }
+  text = "PID " + pid + " | ZID " + zid + " | DMG " + dmg + " | RNG " + rng + " | HP " + hp
+  setHudText(level.debugHud, text)
+}
+
+on onGameEnd {
+  if(level.debugHud) removeHud(level.debugHud)
+  level.debugHud = null
+}

@@ -5,6 +5,7 @@ export class DevModule {
     this.open = false;
     this.node = null;
     this._prevTimeScale = null;
+    this._onChooseClass = null;
 
     // track mouse buttons (simple)
     this.mouseDown = false;
@@ -22,6 +23,10 @@ export class DevModule {
       }
     });
 
+    this._onChooseClass = ()=>{
+      engine.events.emit("menu:chooseClass", {});
+    };
+
     engine.events.on("dev:toggle", ()=>{
       this.open = !this.open;
       if(this.open){
@@ -32,7 +37,8 @@ export class DevModule {
   if(menu){
     this.node = DzsDevScreen({
       engine,
-      onClose: ()=>engine.events.emit("dev:toggle", {})
+      onClose: ()=>engine.events.emit("dev:toggle", {}),
+      onChooseClass: this._onChooseClass
     });
     menu.setOverlay(this.node);
     menu.toast("Developer Menu opened");
