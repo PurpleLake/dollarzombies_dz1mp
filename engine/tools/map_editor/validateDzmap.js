@@ -99,5 +99,11 @@ export function validateDzmap(dzmap){
     }
   }
 
+  for(const w of walls){
+    if(w?.height != null && !isFiniteNumber(w.height)){
+      errors.push(`Wall ${w?.id || ""} has invalid height`);
+    }
+  }
+
   return { errors, warnings };
 }

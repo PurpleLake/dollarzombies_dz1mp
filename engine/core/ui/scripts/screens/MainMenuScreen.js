@@ -68,7 +68,7 @@ function modeCard({ title, desc, imgA, imgB, onPick }){
   return card;
 }
 
-export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode, onBrowser, playerName="", onName }){
+export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode, onBrowser, playerName="", onName, soloOnly=false }){
   const screen = document.createElement("div");
   screen.className = "dz-screen";
 
@@ -83,7 +83,9 @@ export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode,
 
   const sub = document.createElement("div");
   sub.className = "dz-sub";
-  sub.textContent = "Pick a mode. Hover the card to preview.";
+  sub.textContent = soloOnly
+    ? "Solo zombies only for this host."
+    : "Pick a mode. Hover the card to preview.";
 
   const grid = document.createElement("div");
   grid.style.display="grid";
@@ -115,9 +117,13 @@ export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode,
     onPick: ()=>onMode?.("mp"),
   });
 
-  grid.appendChild(zm);
-  grid.appendChild(zmSolo);
-  grid.appendChild(mp);
+  if(soloOnly){
+    grid.appendChild(zmSolo);
+  } else {
+    grid.appendChild(zm);
+    grid.appendChild(zmSolo);
+    grid.appendChild(mp);
+  }
 
   const row = document.createElement("div");
   row.className = "dz-row";

@@ -33,12 +33,23 @@ import { ZmGameOverScreen } from "/engine/core/ui/scripts/screens/ZmGameOverScre
 import { MpModeSelectScreen } from "/engine/core/ui/scripts/screens/MpModeSelectScreen.js";
 import { MpMatchResultsScreen } from "/engine/core/ui/scripts/screens/MpMatchResultsScreen.js";
 import { MpClassScreen } from "/engine/core/ui/scripts/screens/MpClassScreen.js";
+import { PreLobbyScreen } from "/engine/core/ui/scripts/screens/PreLobbyScreen.js";
 import { DevModule } from "/engine/game/zm/dev/scripts/DevModule.js";
 import { zmMaps, getZmMap } from "/engine/game/zm/maps/MapRegistry.js";
 import { mpMaps, getMpMap } from "/engine/game/mp/maps/MapRegistry.js";
 import { LobbyController } from "/engine/core/scripts/lobby/LobbyController.js";
 import { MapCompiler } from "/engine/tools/map_editor/MapCompiler.js";
 import { mpGamemodes, getMpGamemode } from "/engine/game/mp/scripts/GamemodeRegistry.js";
+
+const buildFlags = { soloMenuOnly: false };
+async function loadBuildFlags(){
+  try{
+    const res = await fetch("/api/config", { cache: "no-store" });
+    if(!res.ok) return;
+    const data = await res.json();
+    buildFlags.soloMenuOnly = Boolean(data?.soloMenuOnly);
+  } catch {}
+}
 
 // Debug log (bottom-left)
 const logEl = document.getElementById("log");
@@ -103,6 +114,7 @@ engine.ctx.theme = theme;
 engine.ctx.options = options;
 engine.ctx.menu = menu;
 engine.ctx.matchState = {};
+engine.ctx.buildFlags = buildFlags;
 
 // Networking (WS) - used by Zombies (4p co-op) and Multiplayer (6v6)
 const wsUrl = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws";
@@ -573,6 +585,49 @@ function showSettings({ overlay=false } = {}){
   else menu.setScreen(node);
 }
 
+function showPreLobby(mode=session.mode){
+  const nextMode = mode || "zm";
+  session.mode = nextMode;
+  setUiMode(session.mode);
+
+  const isMp = session.mode === "mp";
+  const mapMode = isMp ? "mp" : "zm";
+  const maps = isMp ? [] : getModeMaps(mapMode);
+  const mapId = resolveMapIdForMode(mapMode);
+  if(!isMp && mapId) session.mapId = mapId;
+
+  if(isMp){
+    const gm = getMpGamemode(session.mpGamemode || "TDM");
+    session.mpGamemode = gm?.id || "TDM";
+    options.set("mpGamemode", session.mpGamemode);
+  }
+
+  menu.showHud(false);
+  menu.setOverlay(null);
+  menu.setScreen(PreLobbyScreen({
+    mode: session.mode,
+    maps,
+    selectedMapId: mapId,
+    gamemodes: mpGamemodes,
+    selectedGamemode: session.mpGamemode,
+    preferSolo: session.mode === "zm_solo",
+    onSelectMap: (id)=>{
+      if(!id) return;
+      session.mapId = id;
+      setModeSelection("zm", id);
+    },
+    onSelectGamemode: (id)=>{
+      const gm = getMpGamemode(id);
+      session.mpGamemode = gm?.id || "TDM";
+      options.set("mpGamemode", session.mpGamemode);
+    },
+    onEditClass: ()=> showClassSelect({ returnToPreLobby:true }),
+    onBack: ()=> showMainMenu(),
+    onFindMatch: ()=> queueForMode(isMp ? "mp" : "zm"),
+    onPlaySolo: ()=> queueForMode("zm_solo"),
+  }));
+}
+
 function showQueue(mode=session.mode){
   setUiMode(mode);
   const label = mode === "mp"
@@ -710,7 +765,7 @@ function showLobby(mode=session.mode){
 }
 
 
-function showClassSelect({ returnToLobby=false } = {}){
+function showClassSelect({ returnToLobby=false, returnToPreLobby=false } = {}){
   const mode = session.mode || "zm";
   setUiMode(mode);
   menu.showHud(false);
@@ -718,10 +773,11 @@ function showClassSelect({ returnToLobby=false } = {}){
   menu.setScreen(ClassEditorScreen({
     engine,
     mode,
-    onBack: ()=> returnToLobby ? showLobby(session.mode) : showMainMenu(),
+    onBack: ()=> returnToLobby ? showLobby(session.mode) : (returnToPreLobby ? showPreLobby(session.mode) : showMainMenu()),
     onConfirm: ()=>{
       menu.toast(`${mode === "mp" ? "Multiplayer" : "Zombies"} class updated.`);
       if(returnToLobby) showLobby(session.mode);
+      else if(returnToPreLobby) showPreLobby(session.mode);
       else showMainMenu();
     },
   }));
@@ -736,12 +792,13 @@ function showMainMenu(){
   menu.setOverlay(null);
   menu.setScreen(MainMenuScreen({
     mode: session.mode,
-    onMode: (m)=> m === "mp" ? showMpModeSelect() : queueForMode(m),
-    onPlay: ()=> session.mode === "mp" ? showMpModeSelect() : queueForMode(session.mode),
+    onMode: (m)=> showPreLobby(m),
+    onPlay: ()=> showPreLobby(session.mode),
     onClass: ()=> showClassSelect(),
     onBrowser: ()=> showServerBrowser(),
     onSettings: ()=> showSettings({ overlay:false }),
     playerName: options.get("playerName"),
+    soloOnly: engine.ctx.buildFlags?.soloMenuOnly,
     onName: (name)=>{
       options.set("playerName", name);
       engine.ctx.net?.setName?.(name);
@@ -841,8 +898,16 @@ engine.events.on("engine:tick", ()=>{
   }
 });
 
-// Boot: show main menu
-showMainMenu();
+// Boot: resolve flags before showing menu
+async function boot(){
+  await loadBuildFlags();
+  if(buildFlags.soloMenuOnly){
+    session.mode = "zm_solo";
+    setUiMode(session.mode);
+  }
+  showMainMenu();
+}
+boot();
 
 // If something throws, show it
 window.addEventListener("error", (e) => uiLog("[error] " + (e?.error?.stack || e.message)));

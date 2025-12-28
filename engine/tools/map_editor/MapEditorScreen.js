@@ -285,10 +285,34 @@ export function MapEditorScreen({ engine, onClose }){
     getSelectedAsset: ()=> selectedAsset,
     onPlace: (payload)=>{
       if(!payload) return;
-      const { x, y, z, asset } = payload;
-      if(!asset) return;
-      const item = {
+      const { x, y, z, asset, tool } = payload;
+      if(tool === "wall"){
+        const item = {
+          id: `w${Date.now()}`,
+          x: Number(x || 0),
+          y: Number(y || 0),
+          w: 2,
+          h: 2,
+          rot: 0,
+          height: 2.6,
+        };
+        onMutateWall(item);
+        return;
+      }
+      if(tool === "asset" && !asset) return;
+      const base = {
         id: `p${Date.now()}`,
+        x: Number(x || 0),
+        y: Number(y || 0),
+        z: Number(z || 0),
+        rot: 0,
+      };
+      if(tool === "prop" || !asset){
+        onMutateProp({ ...base, type:"crate", scale: 1 });
+        return;
+      }
+      const item = {
+        ...base,
         type: asset.id,
         assetId: asset.id,
         kind: asset.kind,
@@ -296,10 +320,6 @@ export function MapEditorScreen({ engine, onClose }){
         material: asset.material,
         collision: asset.collision,
         collider: asset.collider,
-        x: Number(x || 0),
-        y: Number(y || 0),
-        z: Number(z || 0),
-        rot: 0,
         scale: Number(asset.scale || 1),
       };
       onMutateProp(item);
@@ -310,12 +330,12 @@ export function MapEditorScreen({ engine, onClose }){
       refreshList();
       canvasView.render();
     },
-    onMove: (sel, pos)=>{
+    onMove: (sel, pos, { commit=false } = {})=>{
       if(!sel) return;
       applyInspectorChange((draft, it)=>{
         it.x = Number(pos.x || 0);
         it.y = Number(pos.y || 0);
-      });
+      }, { pushUndo: commit });
     },
   });
 
@@ -574,7 +594,8 @@ export function MapEditorScreen({ engine, onClose }){
 
     const fields = [];
     fields.push(makeField({ label:"Id", value:item.id, onChange:(v)=>{
-      applyInspectorChange((draft, it)=> it.id = String(v || ""));
+      const nextId = String(v || "");
+      applyInspectorChange((draft, it)=> it.id = nextId, { updateSelectedId: nextId });
     }}));
     fields.push(makeField({ label:"X", value:item.x, onChange:(v)=>{
       applyInspectorChange((draft, it)=> it.x = Number(v || 0));
@@ -595,6 +616,12 @@ export function MapEditorScreen({ engine, onClose }){
     if(type === "wall" || type === "prop" || type === "player"){
       fields.push(makeField({ label:"Rot", value:item.rot || 0, onChange:(v)=>{
         applyInspectorChange((draft, it)=> it.rot = Number(v || 0));
+      }, type:"number" }));
+    }
+
+    if(type === "wall"){
+      fields.push(makeField({ label:"Height", value:item.height ?? 2.6, onChange:(v)=>{
+        applyInspectorChange((draft, it)=> it.height = Number(v || 0));
       }, type:"number" }));
     }
 
@@ -689,8 +716,8 @@ export function MapEditorScreen({ engine, onClose }){
     inspectorBody.appendChild(removeBtn);
   }
 
-  function applyInspectorChange(fn){
-    undo.push(mapData);
+  function applyInspectorChange(fn, { pushUndo=true, updateSelectedId=null } = {}){
+    if(pushUndo) undo.push(mapData);
     const next = clone(mapData);
     const type = selected.type;
     const list = (type === "wall") ? next.walls :
@@ -702,6 +729,9 @@ export function MapEditorScreen({ engine, onClose }){
     const it = list.find(i=>i.id === selected.id);
     if(it) fn(next, it);
     mapData = next;
+    if(updateSelectedId && selected){
+      selected = { ...selected, id: updateSelectedId };
+    }
     refreshAll();
   }
 
@@ -756,6 +786,16 @@ export function MapEditorScreen({ engine, onClose }){
     next.props.push(item);
     mapData = next;
     selected = { type:"prop", id:item.id };
+    refreshAll();
+  }
+
+  function onMutateWall(item){
+    if(!item) return;
+    undo.push(mapData);
+    const next = clone(mapData);
+    next.walls.push(item);
+    mapData = next;
+    selected = { type:"wall", id:item.id };
     refreshAll();
   }
 

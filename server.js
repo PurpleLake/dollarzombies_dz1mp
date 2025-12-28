@@ -550,7 +550,7 @@ function tryFormMatches(mode){
     }
     const matchId = matchManager.createMatch(mode, { gamemode });
     if(!matchId) break;
-    const group = q.splice(0, maxPlayers);
+    const group = q.splice(0, Math.min(q.length, maxPlayers));
     for(const id of group){
       const client = netState.clients.get(id);
       if(!client) continue;

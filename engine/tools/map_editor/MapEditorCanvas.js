@@ -428,7 +428,9 @@ export class MapEditorCanvas {
       const id = `${this.tool === "wall" ? "w" : "z"}${Date.now()}`;
       this.onMutate((draft)=>{
         const list = (this.tool === "wall") ? draft.walls : draft.zones;
-        list.push({ id, x:start.x, y:start.y, w:1, h:1, rot:0, name:"", type:"" });
+        const base = { id, x:start.x, y:start.y, w:1, h:1, rot:0, name:"", type:"" };
+        if(this.tool === "wall") base.height = 2.6;
+        list.push(base);
       }, { commit:true });
       this.onSelect?.({ type:this.tool, id });
       this.drag = { mode:"resize", type:this.tool, id, startWorld:start, handle:"se", started:true };
@@ -457,7 +459,8 @@ export class MapEditorCanvas {
     const id = `${tool[0]}${Date.now()}`;
     if(tool === "prop" || tool === "asset"){
       const a = this.asset;
-      if(a && tool === "asset"){
+      if(tool === "asset"){
+        if(!a) return null;
         return {
           id,
           type: a.id,

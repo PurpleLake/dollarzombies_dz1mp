@@ -93,7 +93,7 @@ export class MapEditorPreview3D {
         if(hit?.selectable){
           this.onSelect?.(hit.selectable);
           if(hit.selectable.type === "prop"){
-            this._drag = { sel: hit.selectable };
+            this._drag = { sel: hit.selectable, started: false };
           }
         } else {
           this.onSelect?.(null);
@@ -107,8 +107,15 @@ export class MapEditorPreview3D {
       if(tool === "prop" || tool === "asset"){
         const asset = this.getSelectedAsset?.();
         const point = this._pickGround(e);
-        if(point && asset){
-          this.onPlace?.({ x: point.x, y: point.z, z: 0, asset });
+        if(point){
+          if(tool === "asset" && !asset) return;
+          this.onPlace?.({ x: point.x, y: point.z, z: 0, asset, tool });
+        }
+      }
+      if(tool === "wall"){
+        const point = this._pickGround(e);
+        if(point){
+          this.onPlace?.({ x: point.x, y: point.z, z: 0, tool });
         }
       }
       this.controls.dragging = true;
@@ -120,7 +127,9 @@ export class MapEditorPreview3D {
       if(this._drag){
         const point = this._pickGround(e);
         if(point){
-          this.onMove?.(this._drag.sel, { x: point.x, y: point.z });
+          const commit = !this._drag.started;
+          this._drag.started = true;
+          this.onMove?.(this._drag.sel, { x: point.x, y: point.z }, { commit });
         }
         return;
       }
@@ -248,10 +257,11 @@ export class MapEditorPreview3D {
     for(const w of (mapData.walls || [])){
       const ww = Math.max(0.1, Math.abs(toNumber(w.w, 1)));
       const hh = Math.max(0.1, Math.abs(toNumber(w.h, 1)));
-      const geo = new THREE.BoxGeometry(ww, 3, hh);
+      const wallHeight = Math.max(0.1, toNumber(w.height, 2.6));
+      const geo = new THREE.BoxGeometry(ww, wallHeight, hh);
       const mat = (selected?.type === "wall" && selected?.id === w.id) ? wallSelMat : wallMat;
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(toNumber(w.x, 0), 1.5, toNumber(w.y, 0));
+      mesh.position.set(toNumber(w.x, 0), wallHeight / 2, toNumber(w.y, 0));
       mesh.rotation.y = -degToRad(w.rot || 0);
       mesh.userData.selectable = { type:"wall", id:w.id };
       this._selectables.push(mesh);

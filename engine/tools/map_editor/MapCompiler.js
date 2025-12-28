@@ -126,12 +126,13 @@ export class MapCompiler {
     const walls = Array.isArray(dzmapData.walls) ? dzmapData.walls : [];
     for(const w of walls){
       if(!isFiniteNumber(w?.x) || !isFiniteNumber(w?.y) || !isFiniteNumber(w?.w) || !isFiniteNumber(w?.h)) continue;
+      const wallHeight = toNumber(w?.height, 2.6);
       const mesh = world?.addWallBox?.({
         width: Math.abs(Number(w.w)),
-        height: 2.6,
+        height: wallHeight,
         depth: Math.abs(Number(w.h)),
         x: Number(w.x),
-        y: 1.3,
+        y: wallHeight / 2,
         z: Number(w.y),
       });
       if(mesh?.rotation){
@@ -143,7 +144,7 @@ export class MapCompiler {
         y: 0,
         z: Number(w.y || 0),
         sx: Math.abs(Number(w.w || 1)),
-        sy: 2.6,
+        sy: wallHeight,
         sz: Math.abs(Number(w.h || 1)),
         rot: Number(w.rot || 0),
       });
@@ -310,9 +311,10 @@ export function dzmapToDzs(dzmapData){
   lines.push("  addFloor 60");
   lines.push("  addWalls 60 3");
   const walls = Array.isArray(dzmapData.walls) ? dzmapData.walls : [];
-  for(const w of walls){
-    lines.push(`  spawnEntity box {x:${Number(w.x||0)},y:1.3,z:${Number(w.y||0)}} {sx:${Number(w.w||1)},sy:2.6,sz:${Number(w.h||1)},tag:wall}`);
-  }
+    for(const w of walls){
+      const wallHeight = toNumber(w?.height, 2.6);
+      lines.push(`  spawnEntity box {x:${Number(w.x||0)},y:${wallHeight/2},z:${Number(w.y||0)}} {sx:${Number(w.w||1)},sy:${wallHeight},sz:${Number(w.h||1)},tag:wall}`);
+    }
   const props = Array.isArray(dzmapData.props) ? dzmapData.props : [];
   for(const p of props){
     lines.push(`  spawnEntity box {x:${Number(p.x||0)},y:0.5,z:${Number(p.y||0)}} {sx:${Number(p.scale||1)},sy:${Number(p.scale||1)},sz:${Number(p.scale||1)},tag:prop}`);

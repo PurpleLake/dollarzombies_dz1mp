@@ -113,6 +113,222 @@ export class UIRoot {
         z-index:1;
       }
 
+      .dz-prelobby{
+        width:min(1180px, 96vw);
+        background:
+          linear-gradient(180deg, rgba(8,9,8,0.92), rgba(6,7,6,0.98)),
+          radial-gradient(circle at 10% 10%, rgba(255,170,70,0.08), transparent 40%),
+          radial-gradient(circle at 90% 20%, rgba(120,160,90,0.08), transparent 40%);
+        border:1px solid rgba(255,184,77,0.25);
+        box-shadow: 0 18px 50px var(--ui-shadow);
+        color:var(--ui-text);
+        font-family:var(--ui-font);
+        padding:14px;
+        display:grid;
+        gap:12px;
+        position:relative;
+      }
+      .dz-prelobby::before{
+        content:"";
+        position:absolute;
+        inset:0;
+        background:
+          linear-gradient(90deg, rgba(255,184,77,0.12), transparent 28%),
+          linear-gradient(180deg, rgba(255,255,255,0.04), transparent 35%, rgba(0,0,0,0.45));
+        pointer-events:none;
+      }
+      .dz-prelobby > *{position:relative; z-index:1;}
+      .dz-prelobby-header{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        padding-bottom:8px;
+        border-bottom:1px solid rgba(255,184,77,0.25);
+      }
+      .dz-prelobby-heading{
+        font-size:18px;
+        letter-spacing:0.28em;
+        font-weight:900;
+        text-transform:uppercase;
+      }
+      .dz-prelobby-header-right{
+        font-size:11px;
+        letter-spacing:0.22em;
+        color:rgba(255,212,150,0.8);
+        text-transform:uppercase;
+      }
+      .dz-prelobby-grid{
+        display:grid;
+        grid-template-columns: minmax(260px, 340px) 1fr;
+        gap:12px;
+      }
+      .dz-prelobby-left,
+      .dz-prelobby-right{
+        display:grid;
+        gap:10px;
+      }
+      .dz-prelobby-section-title{
+        font-size:12px;
+        letter-spacing:0.22em;
+        text-transform:uppercase;
+        color:rgba(255,212,150,0.8);
+      }
+      .dz-prelobby-list{
+        display:grid;
+        gap:8px;
+        max-height:420px;
+        overflow:auto;
+        padding-right:2px;
+      }
+      .dz-prelobby-item{
+        all:unset;
+        cursor:pointer;
+        display:grid;
+        grid-template-columns: 6px 1fr;
+        gap:10px;
+        padding:10px 12px;
+        border:1px solid rgba(255,255,255,0.08);
+        background:rgba(0,0,0,0.38);
+        transition:background 120ms ease, border-color 120ms ease, transform 120ms ease;
+      }
+      .dz-prelobby-item.is-disabled{
+        cursor:not-allowed;
+        opacity:0.6;
+      }
+      .dz-prelobby-item:hover{transform:translateY(-1px); border-color:rgba(255,184,77,0.45);}
+      .dz-prelobby-item.is-active{
+        border-color:rgba(255,184,77,0.7);
+        background:linear-gradient(90deg, rgba(255,184,77,0.22), rgba(0,0,0,0.38));
+      }
+      .dz-prelobby-item-bar{
+        background:rgba(255,184,77,0.18);
+      }
+      .dz-prelobby-item.is-active .dz-prelobby-item-bar{
+        background:rgba(255,184,77,0.8);
+      }
+      .dz-prelobby-item-body{
+        display:grid;
+        gap:4px;
+      }
+      .dz-prelobby-item-title{
+        font-weight:900;
+        letter-spacing:0.12em;
+        text-transform:uppercase;
+      }
+      .dz-prelobby-item-meta{
+        font-family:var(--ui-mono);
+        font-size:11px;
+        color:rgba(255,255,255,0.65);
+      }
+      .dz-prelobby-item-desc{
+        font-size:11px;
+        color:var(--ui-text-dim);
+      }
+      .dz-prelobby-preview{
+        min-height:240px;
+        border:1px solid rgba(255,255,255,0.08);
+        background-size:cover;
+        background-position:center;
+        padding:14px;
+        display:grid;
+        gap:6px;
+        align-content:end;
+        position:relative;
+        overflow:hidden;
+      }
+      .dz-prelobby-preview::after{
+        content:"";
+        position:absolute;
+        inset:0;
+        background:linear-gradient(180deg, rgba(0,0,0,0.1), rgba(0,0,0,0.7));
+      }
+      .dz-prelobby-preview.is-mode{
+        background:linear-gradient(135deg, rgba(14,16,14,0.9), rgba(8,9,8,0.95));
+      }
+      .dz-prelobby-preview-title{
+        font-weight:900;
+        letter-spacing:0.2em;
+        text-transform:uppercase;
+        font-size:16px;
+        position:relative;
+        z-index:1;
+      }
+      .dz-prelobby-preview-meta{
+        font-family:var(--ui-mono);
+        font-size:11px;
+        color:rgba(255,212,150,0.9);
+        position:relative;
+        z-index:1;
+      }
+      .dz-prelobby-preview-desc{
+        font-size:12px;
+        color:var(--ui-text-dim);
+        position:relative;
+        z-index:1;
+      }
+      .dz-prelobby-class{
+        all:unset;
+        cursor:pointer;
+        border:1px solid rgba(255,184,77,0.35);
+        background:linear-gradient(90deg, rgba(255,184,77,0.15), rgba(0,0,0,0.4));
+        padding:12px;
+        display:grid;
+        gap:6px;
+        text-transform:uppercase;
+      }
+      .dz-prelobby-class-title{
+        font-weight:900;
+        letter-spacing:0.18em;
+      }
+      .dz-prelobby-class-sub{
+        font-size:11px;
+        color:var(--ui-text-dim);
+        text-transform:none;
+      }
+      .dz-prelobby-info{
+        display:grid;
+        gap:8px;
+      }
+      .dz-prelobby-info-card{
+        border:1px solid rgba(255,255,255,0.08);
+        background:rgba(0,0,0,0.35);
+        padding:10px 12px;
+        display:grid;
+        gap:6px;
+      }
+      .dz-prelobby-info-title{
+        font-size:11px;
+        letter-spacing:0.2em;
+        text-transform:uppercase;
+        color:rgba(255,212,150,0.8);
+      }
+      .dz-prelobby-info-body{
+        font-size:12px;
+        color:var(--ui-text-dim);
+      }
+      .dz-prelobby-actions{
+        display:flex;
+        gap:10px;
+        justify-content:flex-end;
+        flex-wrap:wrap;
+      }
+      .dz-prelobby-btn{
+        border-color:rgba(255,184,77,0.5);
+        background:linear-gradient(180deg, rgba(22,18,12,0.9), rgba(8,7,6,0.95));
+        letter-spacing:0.2em;
+      }
+      .dz-prelobby-btn.is-secondary{
+        border-color:rgba(255,255,255,0.18);
+        background:rgba(0,0,0,0.35);
+      }
+      .dz-prelobby-btn.is-primary{
+        border-color:rgba(255,184,77,0.8);
+        box-shadow: 0 0 0 2px rgba(255,184,77,0.2);
+      }
+      @media (max-width: 900px){
+        .dz-prelobby-grid{grid-template-columns:1fr}
+      }
+
       .dz-title{font-size:16px;margin:0 0 6px 0;letter-spacing:0.22em;text-transform:uppercase}
       .dz-sub{margin:0 0 10px 0;color:var(--ui-text-dim);line-height:1.35;font-size:11px;letter-spacing:0.06em}
 
