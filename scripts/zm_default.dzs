@@ -2,22 +2,48 @@
 on zm:build {
   call log "building world..."
   call worldClear
-  call addFloor 60
-  call addWalls 60 3
-  call addCrate  0  0  0.5
-  call addCrate -6  4  0.5
-  call addCrate  8 -3  0.5
+  call addFloor 140
+  call addWalls 140 5
 
-  call setPlayerSpawn 0 10
+  # central cover
+  call addCrate   0 0.5   0
+  call addCrate   4 0.5   2
+  call addCrate  -4 0.5  -2
+
+  # mid-field cover lanes
+  call addCrate -18 0.5  10
+  call addCrate -18 0.5 -10
+  call addCrate  18 0.5  10
+  call addCrate  18 0.5 -10
+  call addCrate -32 0.5   0
+  call addCrate  32 0.5   0
+  call addCrate   0 0.5  32
+  call addCrate   0 0.5 -32
+
+  # perimeter obstacles
+  call addCrate -50 0.5  22
+  call addCrate -50 0.5 -22
+  call addCrate  50 0.5  22
+  call addCrate  50 0.5 -22
+  call addCrate -22 0.5  50
+  call addCrate  22 0.5  50
+  call addCrate -22 0.5 -50
+  call addCrate  22 0.5 -50
+
+  call setPlayerSpawn 0 16
 
   # zombie spawns around the perimeter
-  call addZombieSpawn -20  0
-  call addZombieSpawn  20  0
-  call addZombieSpawn   0 -20
-  call addZombieSpawn   0  20
+  call addZombieSpawn -55   0
+  call addZombieSpawn  55   0
+  call addZombieSpawn   0 -55
+  call addZombieSpawn   0  55
+  call addZombieSpawn -40  40
+  call addZombieSpawn  40  40
+  call addZombieSpawn -40 -40
+  call addZombieSpawn  40 -40
 
-  call setWaveTarget 10
-  call setSpawnEveryMs 750
+  call setWaveTarget 18
+  call setSpawnEveryMs 650
 
   call toast "World built from DZS ✅"
 }

@@ -1,0 +1,86 @@
+{
+  "format": "dzmap",
+  "version": 1,
+  "meta": {
+    "name": "mp_scarab_range",
+    "modes": ["MP"],
+    "author": "Host",
+    "createdAt": 0
+  },
+  "bounds": { "minX": -120, "minY": -90, "maxX": 120, "maxY": 90 },
+  "walls": [
+    { "id":"w_center_core", "x":0, "y":0, "w":22, "h":22, "rot":0, "height":2.6 },
+    { "id":"w_mid_north", "x":0, "y":36, "w":48, "h":6, "rot":0, "height":2.6 },
+    { "id":"w_mid_south", "x":0, "y":-36, "w":48, "h":6, "rot":0, "height":2.6 },
+    { "id":"w_lane_left", "x":-50, "y":0, "w":8, "h":64, "rot":0, "height":2.6 },
+    { "id":"w_lane_right", "x":50, "y":0, "w":8, "h":64, "rot":0, "height":2.6 },
+    { "id":"w_left_top", "x":-78, "y":36, "w":26, "h":6, "rot":0, "height":2.6 },
+    { "id":"w_left_bottom", "x":-78, "y":-36, "w":26, "h":6, "rot":0, "height":2.6 },
+    { "id":"w_right_top", "x":78, "y":36, "w":26, "h":6, "rot":0, "height":2.6 },
+    { "id":"w_right_bottom", "x":78, "y":-36, "w":26, "h":6, "rot":0, "height":2.6 },
+    { "id":"w_mid_diag_a", "x":-20, "y":12, "w":14, "h":4, "rot":25, "height":2.6 },
+    { "id":"w_mid_diag_b", "x":20, "y":-12, "w":14, "h":4, "rot":25, "height":2.6 },
+    { "id":"w_mid_diag_c", "x":20, "y":12, "w":14, "h":4, "rot":-25, "height":2.6 },
+    { "id":"w_mid_diag_d", "x":-20, "y":-12, "w":14, "h":4, "rot":-25, "height":2.6 },
+    { "id":"w_spawn_a_cover1", "x":-95, "y":18, "w":14, "h":6, "rot":0, "height":2.6 },
+    { "id":"w_spawn_a_cover2", "x":-95, "y":-18, "w":14, "h":6, "rot":0, "height":2.6 },
+    { "id":"w_spawn_b_cover1", "x":95, "y":18, "w":14, "h":6, "rot":0, "height":2.6 },
+    { "id":"w_spawn_b_cover2", "x":95, "y":-18, "w":14, "h":6, "rot":0, "height":2.6 }
+  ],
+  "props": [
+    { "id":"p_mid_crate_a", "type":"crate_wood", "x":-6, "y":20, "z":0, "rot":0, "scale":1, "kind":"box", "material":{ "color":"#8a5a32" }, "collision":true, "collider":{ "type":"box", "sx":1, "sy":1, "sz":1 } },
+    { "id":"p_mid_crate_b", "type":"crate_wood", "x":6, "y":-20, "z":0, "rot":0, "scale":1, "kind":"box", "material":{ "color":"#8a5a32" }, "collision":true, "collider":{ "type":"box", "sx":1, "sy":1, "sz":1 } },
+    { "id":"p_mid_block_a", "type":"concrete_block", "x":-12, "y":8, "z":0, "rot":0, "scale":1, "kind":"box", "material":{ "color":"#6a6f73" }, "collision":true, "collider":{ "type":"box", "sx":1.6, "sy":0.8, "sz":0.6 } },
+    { "id":"p_mid_block_b", "type":"concrete_block", "x":12, "y":-8, "z":0, "rot":0, "scale":1, "kind":"box", "material":{ "color":"#6a6f73" }, "collision":true, "collider":{ "type":"box", "sx":1.6, "sy":0.8, "sz":0.6 } },
+    { "id":"p_mid_barrel_a", "type":"barrel_metal", "x":-4, "y":-8, "z":0, "rot":0, "scale":1, "kind":"cylinder", "material":{ "color":"#5b6672" }, "collision":true, "collider":{ "type":"cylinder", "rTop":0.45, "rBottom":0.45, "h":1 } },
+    { "id":"p_mid_barrel_b", "type":"barrel_metal", "x":4, "y":8, "z":0, "rot":0, "scale":1, "kind":"cylinder", "material":{ "color":"#5b6672" }, "collision":true, "collider":{ "type":"cylinder", "rTop":0.45, "rBottom":0.45, "h":1 } },
+    { "id":"p_lane_left_fence1", "type":"fence_segment", "x":-50, "y":26, "z":0, "rot":90, "scale":1, "kind":"box", "material":{ "color":"#3f4b56" }, "collision":true, "collider":{ "type":"box", "sx":2.4, "sy":1.2, "sz":0.2 } },
+    { "id":"p_lane_left_fence2", "type":"fence_segment", "x":-50, "y":-26, "z":0, "rot":90, "scale":1, "kind":"box", "material":{ "color":"#3f4b56" }, "collision":true, "collider":{ "type":"box", "sx":2.4, "sy":1.2, "sz":0.2 } },
+    { "id":"p_lane_right_fence1", "type":"fence_segment", "x":50, "y":26, "z":0, "rot":90, "scale":1, "kind":"box", "material":{ "color":"#3f4b56" }, "collision":true, "collider":{ "type":"box", "sx":2.4, "sy":1.2, "sz":0.2 } },
+    { "id":"p_lane_right_fence2", "type":"fence_segment", "x":50, "y":-26, "z":0, "rot":90, "scale":1, "kind":"box", "material":{ "color":"#3f4b56" }, "collision":true, "collider":{ "type":"box", "sx":2.4, "sy":1.2, "sz":0.2 } },
+    { "id":"p_spawn_a_stack1", "type":"crate_wood", "x":-102, "y":32, "z":0, "rot":0, "scale":1.2, "kind":"box", "material":{ "color":"#8a5a32" }, "collision":true, "collider":{ "type":"box", "sx":1.2, "sy":1.2, "sz":1.2 } },
+    { "id":"p_spawn_a_stack2", "type":"crate_wood", "x":-102, "y":-32, "z":0, "rot":0, "scale":1.2, "kind":"box", "material":{ "color":"#8a5a32" }, "collision":true, "collider":{ "type":"box", "sx":1.2, "sy":1.2, "sz":1.2 } },
+    { "id":"p_spawn_b_stack1", "type":"crate_wood", "x":102, "y":32, "z":0, "rot":0, "scale":1.2, "kind":"box", "material":{ "color":"#8a5a32" }, "collision":true, "collider":{ "type":"box", "sx":1.2, "sy":1.2, "sz":1.2 } },
+    { "id":"p_spawn_b_stack2", "type":"crate_wood", "x":102, "y":-32, "z":0, "rot":0, "scale":1.2, "kind":"box", "material":{ "color":"#8a5a32" }, "collision":true, "collider":{ "type":"box", "sx":1.2, "sy":1.2, "sz":1.2 } },
+    { "id":"p_bush_left", "type":"bush_small", "x":-70, "y":0, "z":0, "rot":0, "scale":1, "kind":"sphere", "material":{ "color":"#355c3d" }, "collision":false },
+    { "id":"p_bush_right", "type":"bush_small", "x":70, "y":0, "z":0, "rot":0, "scale":1, "kind":"sphere", "material":{ "color":"#355c3d" }, "collision":false }
+  ],
+  "spawns": {
+    "player": [
+      { "id":"ps_a1", "x":-105, "y":-30, "rot":90, "team":"A" },
+      { "id":"ps_a2", "x":-105, "y":-18, "rot":90, "team":"A" },
+      { "id":"ps_a3", "x":-105, "y":-6, "rot":90, "team":"A" },
+      { "id":"ps_a4", "x":-105, "y":6, "rot":90, "team":"A" },
+      { "id":"ps_a5", "x":-105, "y":18, "rot":90, "team":"A" },
+      { "id":"ps_a6", "x":-105, "y":30, "rot":90, "team":"A" },
+      { "id":"ps_a7", "x":-92, "y":-24, "rot":90, "team":"A" },
+      { "id":"ps_a8", "x":-92, "y":0, "rot":90, "team":"A" },
+      { "id":"ps_a9", "x":-92, "y":24, "rot":90, "team":"A" },
+      { "id":"ps_a10", "x":-88, "y":-12, "rot":90, "team":"A" },
+      { "id":"ps_a11", "x":-88, "y":12, "rot":90, "team":"A" },
+      { "id":"ps_b1", "x":105, "y":-30, "rot":-90, "team":"B" },
+      { "id":"ps_b2", "x":105, "y":-18, "rot":-90, "team":"B" },
+      { "id":"ps_b3", "x":105, "y":-6, "rot":-90, "team":"B" },
+      { "id":"ps_b4", "x":105, "y":6, "rot":-90, "team":"B" },
+      { "id":"ps_b5", "x":105, "y":18, "rot":-90, "team":"B" },
+      { "id":"ps_b6", "x":105, "y":30, "rot":-90, "team":"B" },
+      { "id":"ps_b7", "x":92, "y":-24, "rot":-90, "team":"B" },
+      { "id":"ps_b8", "x":92, "y":0, "rot":-90, "team":"B" },
+      { "id":"ps_b9", "x":92, "y":24, "rot":-90, "team":"B" },
+      { "id":"ps_b10", "x":88, "y":-12, "rot":-90, "team":"B" },
+      { "id":"ps_b11", "x":88, "y":12, "rot":-90, "team":"B" }
+    ],
+    "zombie": []
+  },
+  "lights": [
+    { "id":"l_ambient", "kind":"ambient", "x":0, "y":0, "z":10, "intensity":0.45, "color":"#cfd6df" },
+    { "id":"l_mid", "kind":"point", "x":0, "y":0, "z":8, "intensity":0.9, "color":"#ffd8a6", "range":60 },
+    { "id":"l_left", "kind":"point", "x":-70, "y":20, "z":7, "intensity":0.75, "color":"#9fb3c7", "range":50 },
+    { "id":"l_right", "kind":"point", "x":70, "y":-20, "z":7, "intensity":0.75, "color":"#9fb3c7", "range":50 }
+  ],
+  "zones": [
+    { "id":"z_mid", "name":"mid_objective", "x":0, "y":0, "w":40, "h":40 },
+    { "id":"z_north_lane", "name":"north_lane", "x":0, "y":55, "w":120, "h":20 },
+    { "id":"z_south_lane", "name":"south_lane", "x":0, "y":-55, "w":120, "h":20 }
+  ]
+}

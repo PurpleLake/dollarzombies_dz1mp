@@ -413,6 +413,7 @@ export function MapEditorScreen({ engine, onClose }){
   templateList.className = "dzme-template-list";
   const templates = [
     { label:"MP Base", path:"/engine/tools/map_editor/templates/mp_base.dzmap" },
+    { label:"MP Scarab Range", path:"/engine/tools/map_editor/templates/mp_scarab_range.dzmap" },
     { label:"ZM Base", path:"/engine/tools/map_editor/templates/zm_base.dzmap" },
   ];
   for(const t of templates){
