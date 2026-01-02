@@ -4,6 +4,8 @@
   "type": "module",
   "version": "1.0.0",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "editor": "node server.js",
+    "compile:map": "node engine/compiler/compileMap.js"
   }
 }

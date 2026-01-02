@@ -43,9 +43,12 @@ Browser-first FPS prototype with Zombies survival, Multiplayer, a DZS scripting 
 6) Download the script to keep a copy or move it into `dzs_library/`.
 
 ## Map Editor
-- Tooling lives under `engine/tools/map_editor/`.
-- Build and export `.dzmap` files with walls, props, lights, spawns, and zones.
-- Compiler runs in-game when a dzmap is loaded.
+- Unity-style editor lives under `engine/editor/index.html` and is served at `http://localhost:3000/engine/editor/index.html`.
+- Toolbar supports New/Open/Save/Save As plus compile guidance. Hierarchy, Inspector, Assets palette, viewport gizmos (W/E/R), and console are available.
+- Authoring format is `.dzs` (human-readable). Autosave writes to `localStorage` every 30s.
+- Compile a map for runtime: `npm run compile:map -- --in maps/<name>.dzs --out public/maps/<name>.dzmap`.
+- Sample authoring file: `maps/sample.dzs` → compiled output `public/maps/sample.dzmap`.
+- Runtime loader: `loadMap("public/maps/<name>.dzmap")` from `engine/runtime/worldLoader.js`.
 
 ## Weapons
 - Definitions: `engine/core/weapons/scripts/WeaponDefs.js`

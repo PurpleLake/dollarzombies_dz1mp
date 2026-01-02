@@ -27,6 +27,7 @@ const MIME = {
   ".svg": "image/svg+xml; charset=utf-8",
   ".glb": "model/gltf-binary",
   ".gltf": "model/gltf+json; charset=utf-8",
+  ".dzmap": "application/json; charset=utf-8",
   ".map": "application/json; charset=utf-8",
 };
 
