@@ -22,6 +22,13 @@ export class ScriptLoader {
       this._unsubs.push(off);
     };
 
+    const entityRoutes = [
+      ["entity:spawn", ["onEntitySpawn"]],
+      ["entity:damaged", ["onEntityDamaged"]],
+      ["entity:death", ["onEntityDeath"]],
+    ];
+    for (const [evt, handlers] of entityRoutes) route(evt, handlers);
+
     const zmRoutes = [
       ["zm:preload", ["onGamePreload"]],
       ["zm:build", ["onGameBuild"]],

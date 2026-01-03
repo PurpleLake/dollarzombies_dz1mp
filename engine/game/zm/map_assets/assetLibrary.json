@@ -45,6 +45,22 @@
       "scale": 1,
       "material": { "color": "#3b4a33" },
       "collision": false
+    },
+    {
+      "id": "ground_dirt",
+      "name": "Ground Tile - Dirt",
+      "kind": "tile",
+      "scale": 6,
+      "material": { "color": "#3b2a1b" },
+      "collision": false
+    },
+    {
+      "id": "ground_grass",
+      "name": "Ground Tile - Grass",
+      "kind": "tile",
+      "scale": 6,
+      "material": { "color": "#2c4b2f" },
+      "collision": false
     }
   ]
 }

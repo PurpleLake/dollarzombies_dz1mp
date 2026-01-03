@@ -1,5 +1,5 @@
 import { Renderer3D } from "../../../core/scripts/Renderer3D.js";
-import { EntityRegistry } from "../../../core/scripts/EntityRegistry.js";
+import { EntityRegistry as ScriptEntityRegistry } from "../../../core/scripts/entities/EntityRegistry.js";
 import { ModelSpawner } from "../../../core/scripts/ModelSpawner.js";
 import { Input } from "../../../core/scripts/Input.js";
 import { ZmWorld } from "./ZmWorld.js";
@@ -23,7 +23,8 @@ export class ZmGame {
     this.engine.ctx.canvas = canvas;
     this.engine.ctx.renderer = this.renderer;
 
-    this.entities = new EntityRegistry({ scene: this.renderer.scene, events: engine.events });
+    const existingEntities = this.engine.ctx.entities;
+    this.entities = existingEntities?.spawnEntity ? existingEntities : new ScriptEntityRegistry(engine);
     this.modelSpawner = new ModelSpawner({ renderer: this.renderer, entities: this.entities, events: engine.events });
     this.engine.ctx.entities = this.entities;
     this.engine.ctx.modelSpawner = this.modelSpawner;
@@ -83,6 +84,7 @@ export class ZmGame {
 
 // Game end bridge
 const offEnd = this.engine.events.on("zm:playerDeath", (e)=>{
+  if(this.players?.allowRespawn) return;
   this.engine.events.emit("zm:gameEnd", { reason:"playerDeath", event:e });
 });
     this._unsubs.push(offEnd);

@@ -50,11 +50,14 @@ export class MapEditorPreview3D {
       lastY: 0,
     };
 
-    const hemi = new THREE.HemisphereLight(0x88aaff, 0x111122, 0.7);
+    const hemi = new THREE.HemisphereLight(0x88aaff, 0x111122, 1.1);
     this.scene.add(hemi);
-    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    const dir = new THREE.DirectionalLight(0xffffff, 1.1);
     dir.position.set(10, 18, 8);
     this.scene.add(dir);
+    const fill = new THREE.PointLight(0xffd4a1, 0.7, 120, 1.6);
+    fill.position.set(0, 6, 0);
+    this.scene.add(fill);
 
     this.mapGroup = new THREE.Group();
     this.scene.add(this.mapGroup);
@@ -63,6 +66,8 @@ export class MapEditorPreview3D {
     this._ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     this._drag = null;
     this._selectables = [];
+    this._textureCache = new Map();
+    this._textureLoader = new THREE.TextureLoader();
 
     this._onResize = ()=> this.resize();
     window.addEventListener("resize", this._onResize);
@@ -113,6 +118,12 @@ export class MapEditorPreview3D {
         }
       }
       if(tool === "wall"){
+        const point = this._pickGround(e);
+        if(point){
+          this.onPlace?.({ x: point.x, y: point.z, z: 0, tool });
+        }
+      }
+      if(tool === "player" || tool === "zombie" || tool === "light" || tool === "zone"){
         const point = this._pickGround(e);
         if(point){
           this.onPlace?.({ x: point.x, y: point.z, z: 0, tool });
@@ -240,7 +251,12 @@ export class MapEditorPreview3D {
     this.controls.target.set(centerX, 0, centerZ);
 
     const floorGeo = new THREE.PlaneGeometry(width || 1, depth || 1);
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x1c2431, roughness: 0.9, metalness: 0.05 });
+    const floorColor = mapData.floor?.color || "#1c2431";
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: floorColor,
+      roughness: toNumber(mapData.floor?.roughness, 0.9),
+      metalness: toNumber(mapData.floor?.metalness, 0.05),
+    });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(centerX, 0, centerZ);
@@ -252,14 +268,18 @@ export class MapEditorPreview3D {
     grid.material.transparent = true;
     this.mapGroup.add(grid);
 
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0x5b7ca6, roughness: 0.8 });
-    const wallSelMat = new THREE.MeshStandardMaterial({ color: 0xf2b26b, roughness: 0.7 });
     for(const w of (mapData.walls || [])){
       const ww = Math.max(0.1, Math.abs(toNumber(w.w, 1)));
       const hh = Math.max(0.1, Math.abs(toNumber(w.h, 1)));
       const wallHeight = Math.max(0.1, toNumber(w.height, 2.6));
       const geo = new THREE.BoxGeometry(ww, wallHeight, hh);
-      const mat = (selected?.type === "wall" && selected?.id === w.id) ? wallSelMat : wallMat;
+      const isSelected = (selected?.type === "wall" && selected?.id === w.id);
+      const mat = this._makeMaterial({
+        baseColor: 0x5b7ca6,
+        selected: isSelected,
+        texture: w.material?.texture,
+        roughness: 0.8,
+      });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(toNumber(w.x, 0), wallHeight / 2, toNumber(w.y, 0));
       mesh.rotation.y = -degToRad(w.rot || 0);
@@ -268,20 +288,25 @@ export class MapEditorPreview3D {
       this.mapGroup.add(mesh);
     }
 
-    const propMat = new THREE.MeshStandardMaterial({ color: 0xb08b44, roughness: 0.85 });
-    const propSelMat = new THREE.MeshStandardMaterial({ color: 0xf4d27a, roughness: 0.7 });
     for(const p of (mapData.props || [])){
       const s = Math.max(0.4, toNumber(p.scale, 1));
       const isSelected = (selected?.type === "prop" && selected?.id === p.id);
-      const color = isSelected ? "#f4d27a" : (p.material?.color || "#b08b44");
-      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85 });
+      const color = p.material?.color || "#b08b44";
+      const mat = this._makeMaterial({
+        baseColor: color,
+        selected: isSelected,
+        texture: p.material?.texture,
+        roughness: 0.85,
+      });
       let geo = null;
       const kind = String(p.kind || "box");
       if(kind === "sphere") geo = new THREE.SphereGeometry(s * 0.5, 16, 12);
       else if(kind === "cylinder") geo = new THREE.CylinderGeometry(s * 0.35, s * 0.35, s, 12);
+      else if(kind === "tile") geo = new THREE.BoxGeometry(s, 0.08, s);
       else geo = new THREE.BoxGeometry(s, s, s);
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(toNumber(p.x, 0), (s / 2) + toNumber(p.z, 0), toNumber(p.y, 0));
+      const y = (kind === "tile") ? (0.04 + toNumber(p.z, 0)) : ((s / 2) + toNumber(p.z, 0));
+      mesh.position.set(toNumber(p.x, 0), y, toNumber(p.y, 0));
       mesh.rotation.y = -degToRad(p.rot || 0);
       mesh.userData.selectable = { type:"prop", id:p.id };
       this._selectables.push(mesh);
@@ -356,5 +381,33 @@ export class MapEditorPreview3D {
 
     this._updateCamera();
     this.render();
+  }
+
+  _makeMaterial({ baseColor, selected=false, texture=null, roughness=0.85 } = {}){
+    const useTexture = texture && String(texture).trim();
+    const color = useTexture ? 0xffffff : baseColor;
+    const mat = new THREE.MeshStandardMaterial({ color, roughness });
+    if(useTexture){
+      const tex = this._getTexture(String(texture));
+      if(tex) mat.map = tex;
+      mat.color = new THREE.Color(0xffffff);
+    }
+    if(selected){
+      mat.emissive = new THREE.Color(0x553300);
+      mat.emissiveIntensity = 0.35;
+    }
+    return mat;
+  }
+
+  _getTexture(url){
+    if(!url) return null;
+    const key = String(url);
+    if(this._textureCache.has(key)) return this._textureCache.get(key);
+    const tex = this._textureLoader.load(key, ()=> this.render());
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1, 1);
+    this._textureCache.set(key, tex);
+    return tex;
   }
 }

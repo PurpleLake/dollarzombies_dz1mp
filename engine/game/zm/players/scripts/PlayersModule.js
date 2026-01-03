@@ -24,6 +24,10 @@ export class PlayersModule {
     this._shootCooldown = 0;
     this._lastVmWeapon = null;
     this.damageScale = 2.5;
+    this._dead = false;
+    this._respawnAt = 0;
+    this._spawnProtectionUntil = 0;
+    this.allowRespawn = true;
 
     // camera rig for FPS look
     this.camPivot = new THREE.Object3D();
@@ -86,17 +90,32 @@ export class PlayersModule {
   }
 
   damage(amount){
+    if(this._dead) return;
+    if(performance.now() < this._spawnProtectionUntil) return;
     this.hp = Math.max(0, this.hp - amount);
     this.engine.events.emit("player:hp", { hp: this.hp });
     this.engine.events.emit("zm:playerDamaged", { player: this, amount, hp: this.hp });
     if(this.hp <= 0){
+      this._dead = true;
+      this._respawnAt = performance.now() + 2000;
       this.engine.events.emit("player:death", {});
       this.engine.events.emit("zm:playerDeath", { player: this });
-      this.engine.events.emit("dev:toast", { msg: "You died. Refresh to restart." });
+      this.engine.events.emit("dev:toast", { msg: "You died. Press R to respawn or Q to quit." });
     }
   }
 
   tick(dt, ecs, ctx){
+    if(this._dead){
+      const now = performance.now();
+      if(this.input.isDown("KeyQ")){
+        this.engine.events.emit("zm:gameEnd", { reason:"playerQuit" });
+        return;
+      }
+      if(this.allowRespawn && now >= this._respawnAt && this.input.isDown("KeyR")){
+        this._respawn(now);
+      }
+      return;
+    }
     if(Array.isArray(this.engine.ctx.players) && this.engine.ctx.players[0]){
       this.engine.ctx.players[0].health = this.hp;
       this.engine.ctx.players[0].weapon = this.weaponDef;
@@ -151,6 +170,7 @@ export class PlayersModule {
   }
 
   tryShoot(){
+    if(this._dead) return false;
     if(!this.weaponDef || !this.weapon) return false;
     if(this.weaponCtl.reloading) return false;
 
@@ -182,8 +202,10 @@ export class PlayersModule {
 
     for(let p=0; p<pellets; p++){
       const dir = pellets > 1 ? jitterDirection(forward, spread) : forward.clone();
-      this.ray.set(origin, dir);
-      this.ray.far = 80;
+    this.ray.set(origin, dir);
+    const rangeScale = 1.6;
+    const baseRange = Number(this.weaponDef?.range || 40);
+    this.ray.far = Math.max(80, baseRange * rangeScale);
 
       const hit = this.engine.ctx.game?.zombies?.raycast(this.ray);
       if(!hit) continue;
@@ -235,7 +257,8 @@ export class PlayersModule {
   }
 
   _damageForDistance(def, dist){
-    const r = Math.max(1, def.range);
+    const rangeScale = 1.6;
+    const r = Math.max(1, Number(def.range || 0) * rangeScale);
     const drop = Math.max(0, Math.min(1, Number(def.dropoff || 0))) * 0.6;
     if(dist <= r) return def.damage * this.damageScale;
     const minD = def.damage * (1 - drop);
@@ -246,5 +269,23 @@ export class PlayersModule {
 
   dispose(){
     if(this._onWheel) window.removeEventListener("wheel", this._onWheel);
+  }
+
+  requestRespawn(delayMs=0, spawnProtectionMs=0){
+    this._dead = true;
+    this._respawnAt = performance.now() + Math.max(0, Number(delayMs || 0));
+    this._spawnProtectionUntil = performance.now() + Math.max(0, Number(spawnProtectionMs || 0));
+    return true;
+  }
+
+  _respawn(now=performance.now()){
+    this._dead = false;
+    this.hp = 100;
+    this.camPivot.position.set(this.spawn.x, 1.65, this.spawn.z);
+    this._spawnProtectionUntil = now + 1500;
+    this.engine.events.emit("player:hp", { hp: this.hp });
+    this.engine.events.emit("zm:playerSpawn", { player: this });
+    this.engine.events.emit("zm:playerDamaged", { player: this, amount: 0, hp: this.hp });
+    this.engine.events.emit("dev:toast", { msg: "Respawned." });
   }
 }

@@ -12,6 +12,35 @@ export class EntityRegistry {
     this.entities = new Map(); // id -> ent
     this._seq = 1;
     this.loader = new GLTFLoader();
+    this.textureLoader = new THREE.TextureLoader();
+    this.textureCache = new Map();
+  }
+
+  _getTexture(url){
+    if(!url) return null;
+    const key = String(url);
+    if(this.textureCache.has(key)) return this.textureCache.get(key);
+    const tex = this.textureLoader.load(key);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1, 1);
+    this.textureCache.set(key, tex);
+    return tex;
+  }
+
+  _applyTexture(obj, url){
+    if(!obj || !url) return;
+    const tex = this._getTexture(url);
+    if(!tex) return;
+    obj.traverse?.((n)=>{
+      if(!n.isMesh) return;
+      if(!n.material) return;
+      const mats = Array.isArray(n.material) ? n.material : [n.material];
+      for(const m of mats){
+        m.map = tex;
+        m.needsUpdate = true;
+      }
+    });
   }
 
   clear(){
@@ -28,8 +57,11 @@ export class EntityRegistry {
     const scene = this.engine.ctx.renderer?.scene;
 
     const ent = {
-      id, type: String(type||"entity"), tag,
+      id,
+      type: String(type||"entity"),
+      tag,
       health,
+      meta: opts.meta || {},
       object3d: null,
     };
 
@@ -85,6 +117,7 @@ export class EntityRegistry {
         if(Number.isFinite(s)) obj.scale.setScalar(s);
       }
       if(opts.visible === false) obj.visible = false;
+      if(opts.texture) this._applyTexture(obj, String(opts.texture));
       scene?.add(obj);
     }
 

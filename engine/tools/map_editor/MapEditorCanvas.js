@@ -58,12 +58,13 @@ function rectHandles(rect){
 }
 
 export class MapEditorCanvas {
-  constructor({ canvas, getState, onMutate, onSelect }){
+  constructor({ canvas, getState, onMutate, onSelect, onHover }){
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.getState = getState;
     this.onMutate = onMutate;
     this.onSelect = onSelect;
+    this.onHover = onHover;
     this.tool = "select";
     this.snap = true;
     this.grid = DEFAULT_GRID;
@@ -95,6 +96,50 @@ export class MapEditorCanvas {
 
   setSnap(enabled){
     this.snap = !!enabled;
+  }
+
+  setGrid(size){
+    const next = Number(size);
+    if(!Number.isFinite(next) || next <= 0) return;
+    this.grid = next;
+    this.render();
+  }
+
+  resetView(){
+    this.zoom = 12;
+    this.pan = { x: 0, y: 0 };
+    this.render();
+  }
+
+  zoomBy(factor){
+    const rect = this.canvas.getBoundingClientRect();
+    const sx = rect.width / 2;
+    const sy = rect.height / 2;
+    const before = this.screenToWorld(sx, sy);
+    this.zoom = Math.min(60, Math.max(3, this.zoom * factor));
+    const after = this.screenToWorld(sx, sy);
+    this.pan.x += (after.x - before.x) * this.zoom;
+    this.pan.y += -(after.y - before.y) * this.zoom;
+    this.render();
+  }
+
+  focusBounds(bounds, padding=2){
+    if(!bounds) return;
+    const minX = Number(bounds.minX ?? -25);
+    const minY = Number(bounds.minY ?? -25);
+    const maxX = Number(bounds.maxX ?? 25);
+    const maxY = Number(bounds.maxY ?? 25);
+    const pad = Math.max(0, Number(padding) || 0);
+    const spanX = Math.max(1, Math.abs(maxX - minX) + pad * 2);
+    const spanY = Math.max(1, Math.abs(maxY - minY) + pad * 2);
+    const zoomX = this.canvas.width / spanX;
+    const zoomY = this.canvas.height / spanY;
+    this.zoom = Math.min(60, Math.max(3, Math.min(zoomX, zoomY)));
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    this.pan.x = -centerX * this.zoom;
+    this.pan.y = centerY * this.zoom;
+    this.render();
   }
 
   resize(){
@@ -492,6 +537,8 @@ export class MapEditorCanvas {
   }
 
   onMouseMove(e){
+    const hoverPos = this.screenToWorld(e.offsetX, e.offsetY);
+    this.onHover?.(hoverPos);
     if(!this.drag) return;
     if(this.drag.mode === "pan"){
       const dx = e.clientX - this.drag.startX;

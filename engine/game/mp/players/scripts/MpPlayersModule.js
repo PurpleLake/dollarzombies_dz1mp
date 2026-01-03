@@ -174,7 +174,9 @@ tryShoot(){
   // hitscan: ray from camera forward, hit remote capsules
   const origin = this.cam.getWorldPosition(new THREE.Vector3());
   const forward = this.cam.getWorldDirection(new THREE.Vector3()).normalize();
-  this.raycaster.far = def.range || 40;
+  const rangeScale = 1.6;
+  const baseRange = Number(def.range || 40);
+  this.raycaster.far = Math.max(80, baseRange * rangeScale);
 
   // build target meshes list
   const targets = [];
@@ -323,7 +325,8 @@ if(!this._spawned && !this._dead){
   }
 
   _damageForDistance(def, dist){
-    const r = Math.max(1, def.range);
+    const rangeScale = 1.6;
+    const r = Math.max(1, Number(def.range || 0) * rangeScale);
     const drop = Math.max(0, Math.min(1, Number(def.dropoff || 0))) * 0.6;
     if(dist <= r) return def.damage;
     const minD = def.damage * (1 - drop);

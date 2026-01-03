@@ -64,6 +64,23 @@ function clearDzmapEntities(ctx){
 export class MapCompiler {
   constructor(engine){
     this.engine = engine;
+    this._texCache = new Map();
+    this._texLoader = null;
+  }
+
+  _getTexture(url){
+    if(!url) return null;
+    const key = String(url);
+    if(this._texCache.has(key)) return this._texCache.get(key);
+    const THREE = this.engine?.ctx?.renderer?.THREE;
+    if(!THREE) return null;
+    if(!this._texLoader) this._texLoader = new THREE.TextureLoader();
+    const tex = this._texLoader.load(key);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1, 1);
+    this._texCache.set(key, tex);
+    return tex;
   }
 
   compile(dzmapData, { mode="zm", clearWorld=true, mapDef=null } = {}){
@@ -98,7 +115,13 @@ export class MapCompiler {
 
     // Floor + bounds
     if(world?.addFloor){
-      const floor = world.addFloor({ size: Math.max(bounds.sizeX, bounds.sizeY) });
+      const floorColor = parseColorHex(dzmapData.floor?.color, 0x0c1222);
+      const floor = world.addFloor({
+        size: Math.max(bounds.sizeX, bounds.sizeY),
+        color: floorColor,
+        roughness: toNumber(dzmapData.floor?.roughness, 0.95),
+        metalness: toNumber(dzmapData.floor?.metalness, 0.0),
+      });
       if(floor?.position?.set){
         floor.position.set(bounds.centerX, 0, bounds.centerY);
       }
@@ -138,6 +161,14 @@ export class MapCompiler {
       if(mesh?.rotation){
         mesh.rotation.y = degToRad(w.rot || 0);
       }
+      const wallTexture = w.material?.texture;
+      if(mesh?.material && wallTexture){
+        const tex = this._getTexture(String(wallTexture));
+        if(tex){
+          mesh.material.map = tex;
+          mesh.material.needsUpdate = true;
+        }
+      }
       mapCtx.colliders.push({
         type: "box",
         x: Number(w.x || 0),
@@ -156,7 +187,7 @@ export class MapCompiler {
       if(!isFiniteNumber(p?.x) || !isFiniteNumber(p?.y)) continue;
       const scale = Number(p.scale || 1);
       const kind = String(p.kind || (p.model ? "model" : "box"));
-      const height = (kind === "sphere") ? (scale * 0.5) : (kind === "cylinder" ? scale : scale);
+      const height = (kind === "sphere") ? (scale * 0.5) : (kind === "cylinder" ? scale : (kind === "tile" ? 0.08 : scale));
       const baseY = Number(p.z || 0);
       const pos = { x: Number(p.x), y: baseY + height * 0.5, z: Number(p.y) };
       const color = parseColorHex(p.material?.color, 0x6a4a2c);
@@ -166,12 +197,14 @@ export class MapCompiler {
           ctx.entities.spawnEntity("model", pos, {
             model: p.model,
             scale,
+            texture: p.material?.texture,
             tag: "dzmap-prop",
           });
         } else if(kind === "sphere"){
           ctx.entities.spawnEntity("sphere", pos, {
             r: scale * 0.5,
             color,
+            texture: p.material?.texture,
             tag: "dzmap-prop",
           });
         } else if(kind === "cylinder"){
@@ -180,6 +213,16 @@ export class MapCompiler {
             rBottom: scale * 0.35,
             h: scale,
             color,
+            texture: p.material?.texture,
+            tag: "dzmap-prop",
+          });
+        } else if(kind === "tile"){
+          ctx.entities.spawnEntity("box", pos, {
+            sx: scale,
+            sy: height,
+            sz: scale,
+            color,
+            texture: p.material?.texture,
             tag: "dzmap-prop",
           });
         } else {
@@ -188,6 +231,7 @@ export class MapCompiler {
             sy: scale,
             sz: scale,
             color,
+            texture: p.material?.texture,
             tag: "dzmap-prop",
           });
         }
@@ -229,7 +273,7 @@ export class MapCompiler {
             y: baseY,
             z: Number(p.y || 0),
             sx: Number(col.sx || scale),
-            sy: Number(col.sy || scale),
+            sy: Number(col.sy || height),
             sz: Number(col.sz || scale),
             rot: Number(p.rot || 0),
           });

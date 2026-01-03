@@ -11,6 +11,23 @@ export class ModelSpawner {
   }
 
   async spawnModel({ kind="box", url="", id=null, name="", x=0,y=0,z=0, rx=0,ry=0,rz=0, sx=1,sy=1,sz=1, meta={} } = {}){
+    if(this.entities?.spawnEntity){
+      const type = (kind === "gltf") ? "model" : kind;
+      const scale = Number(sx || 1);
+      const ent = await this.entities.spawnEntity(type, { x, y, z }, {
+        id,
+        model: url,
+        scale,
+        tag: meta?.tag,
+        health: meta?.health,
+        meta,
+      });
+      if(this.entities?.setAngles && (rx || ry || rz)){
+        this.entities.setAngles(ent, { x: rx, y: ry, z: rz });
+      }
+      return ent?.id ?? null;
+    }
+
     let obj = null;
 
     if(kind === "box"){
