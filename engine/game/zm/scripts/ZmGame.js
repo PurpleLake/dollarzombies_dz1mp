@@ -39,6 +39,8 @@ export class ZmGame {
 
     this.players = new PlayersModule({ engine, renderer: this.renderer, input: this.input });
     this.zombies = new ZombiesModule({ engine, renderer: this.renderer });
+    this.cash = new CashModule({ engine });
+    this.shop = new ShopModule({ engine, cash: this.cash });
 
     this.weapons = engine.ctx.weapons || new WeaponDB();
 
@@ -49,6 +51,7 @@ export class ZmGame {
     engine.ecs.use((dt, ecs, ctx)=>this.world.tick(dt, ecs, ctx));
     engine.ecs.use((dt, ecs, ctx)=>this.players.tick(dt, ecs, ctx));
     engine.ecs.use((dt, ecs, ctx)=>this.zombies.tick(dt, ecs, ctx));
+    engine.ecs.use((dt, ecs, ctx)=>ctx.triggers?.tick?.(ctx.player, ctx.input));
     engine.ecs.use((dt, ecs, ctx)=>this.waves.tick(dt, ecs, ctx));
     engine.ecs.use((dt, ecs, ctx)=>this.renderTick(dt, ecs, ctx));
   }
