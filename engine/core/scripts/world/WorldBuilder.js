@@ -13,6 +13,7 @@ export class WorldBuilder {
     this.objects = [];
     this.lights = [];
     this.floor = null;
+    this.colliders = [];
   }
 
   clearWorld(){
@@ -22,6 +23,7 @@ export class WorldBuilder {
       obj.material?.dispose?.();
     }
     this.objects.length = 0;
+    this.colliders.length = 0;
 
     for(const l of this.lights){
       try { this.scene?.remove(l); } catch {}
@@ -58,6 +60,7 @@ export class WorldBuilder {
       m.receiveShadow = true;
       this.scene?.add(m);
       this.objects.push(m);
+      this.colliders.push({ type:"box", x, y:0, z, sx:w, sy:h, sz:d, rot:0 });
       return m;
     };
     mk(size, height, thickness, 0, -half);
@@ -66,15 +69,26 @@ export class WorldBuilder {
     mk(thickness, height, size, half, 0);
   }
 
-  addWallBox({ width=2, height=2, depth=1, x=0, y=null, z=0, color=0x283248 } = {}){
+  addWallBox({ width=2, height=2, depth=1, x=0, y=null, z=0, color=0x283248, rot=0 } = {}){
     const mat = new this.THREE.MeshStandardMaterial({ color, roughness: 0.85 });
     const geo = new this.THREE.BoxGeometry(width, height, depth);
     const mesh = new this.THREE.Mesh(geo, mat);
     mesh.position.set(x, y ?? (height/2), z);
+    mesh.rotation.y = Number(rot || 0);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     this.scene?.add(mesh);
     this.objects.push(mesh);
+    this.colliders.push({
+      type:"box",
+      x,
+      y:0,
+      z,
+      sx: width,
+      sy: height,
+      sz: depth,
+      rot: Number(rot || 0),
+    });
     return mesh;
   }
 

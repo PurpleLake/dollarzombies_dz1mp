@@ -490,7 +490,14 @@ async function loadMapForMode(mode, mapDef){
   const mod = await import(mapDef.entryScript + `?v=${Date.now()}`);
   const buildResult = (typeof mod.buildMap === "function") ? await mod.buildMap(engine, builder) : null;
   const spawns = mod.spawnPoints || buildResult || {};
-  const mapCtx = { id: mapDef.id, mode, root: mapDef.root, def: mapDef, spawnPoints: spawns };
+  const mapCtx = {
+    id: mapDef.id,
+    mode,
+    root: mapDef.root,
+    def: mapDef,
+    spawnPoints: spawns,
+    colliders: Array.isArray(builder?.colliders) ? builder.colliders.slice() : [],
+  };
   if(mode === "mp"){
     mapCtx.mpSpawnsTeam0 = spawns.teamA || spawns.team0 || spawns.mpSpawnsTeam0 || [];
     mapCtx.mpSpawnsTeam1 = spawns.teamB || spawns.team1 || spawns.mpSpawnsTeam1 || [];
