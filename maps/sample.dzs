@@ -1,0 +1,127 @@
+{
+  "editorVersion": "1.0",
+  "name": "sample",
+  "objects": [
+    {
+      "id": "floor_1",
+      "name": "Floor",
+      "type": "static",
+      "prefab": "floor",
+      "position": {"x":0,"y":0,"z":0},
+      "rotation": {"x":0,"y":0,"z":0},
+      "scale": {"x":10,"y":1,"z":10},
+      "collider": {"enabled": true, "shape":"box", "size":{"x":10,"y":1,"z":10}},
+      "tags": ["ground"],
+      "custom": {}
+    },
+    {
+      "id": "wall_north",
+      "name": "North Wall",
+      "type": "static",
+      "prefab": "wall",
+      "position": {"x":0,"y":1,"z":-5},
+      "rotation": {"x":0,"y":0,"z":0},
+      "scale": {"x":10,"y":2,"z":1},
+      "collider": {"enabled": true, "shape":"box", "size":{"x":10,"y":2,"z":1}},
+      "tags": ["boundary"],
+      "custom": {}
+    },
+    {
+      "id": "wall_south",
+      "name": "South Wall",
+      "type": "static",
+      "prefab": "wall",
+      "position": {"x":0,"y":1,"z":5},
+      "rotation": {"x":0,"y":180,"z":0},
+      "scale": {"x":10,"y":2,"z":1},
+      "collider": {"enabled": true, "shape":"box", "size":{"x":10,"y":2,"z":1}},
+      "tags": ["boundary"],
+      "custom": {}
+    },
+    {
+      "id": "wall_east",
+      "name": "East Wall",
+      "type": "static",
+      "prefab": "wall",
+      "position": {"x":5,"y":1,"z":0},
+      "rotation": {"x":0,"y":90,"z":0},
+      "scale": {"x":10,"y":2,"z":1},
+      "collider": {"enabled": true, "shape":"box", "size":{"x":10,"y":2,"z":1}},
+      "tags": ["boundary"],
+      "custom": {}
+    },
+    {
+      "id": "wall_west",
+      "name": "West Wall",
+      "type": "static",
+      "prefab": "wall",
+      "position": {"x":-5,"y":1,"z":0},
+      "rotation": {"x":0,"y":90,"z":0},
+      "scale": {"x":10,"y":2,"z":1},
+      "collider": {"enabled": true, "shape":"box", "size":{"x":10,"y":2,"z":1}},
+      "tags": ["boundary"],
+      "custom": {}
+    },
+    {
+      "id": "crate_1",
+      "name": "Crate",
+      "type": "prop",
+      "prefab": "prop_crate",
+      "position": {"x":1,"y":0.5,"z":1},
+      "rotation": {"x":0,"y":0,"z":0},
+      "scale": {"x":1,"y":1,"z":1},
+      "collider": {"enabled": true, "shape":"box", "size":{"x":1,"y":1,"z":1}},
+      "tags": ["cover"],
+      "custom": {}
+    },
+    {
+      "id": "player_spawn",
+      "name": "Player Spawn",
+      "type": "spawn",
+      "prefab": "player_spawn",
+      "position": {"x":0,"y":0,"z":0},
+      "rotation": {"x":0,"y":0,"z":0},
+      "scale": {"x":1,"y":1,"z":1},
+      "collider": {"enabled": false, "shape":"sphere", "size":{"x":1,"y":1,"z":1}},
+      "tags": ["spawn"],
+      "custom": {}
+    },
+    {
+      "id": "z_spawn1",
+      "name": "Zombie A",
+      "type": "spawn",
+      "prefab": "zombie_spawn",
+      "position": {"x":-3,"y":0,"z":-3},
+      "rotation": {"x":0,"y":45,"z":0},
+      "scale": {"x":1,"y":1,"z":1},
+      "collider": {"enabled": false, "shape":"sphere", "size":{"x":1,"y":1,"z":1}},
+      "tags": ["zombie"],
+      "custom": {"weight":1}
+    },
+    {
+      "id": "z_spawn2",
+      "name": "Zombie B",
+      "type": "spawn",
+      "prefab": "zombie_spawn",
+      "position": {"x":3,"y":0,"z":-3},
+      "rotation": {"x":0,"y":135,"z":0},
+      "scale": {"x":1,"y":1,"z":1},
+      "collider": {"enabled": false, "shape":"sphere", "size":{"x":1,"y":1,"z":1}},
+      "tags": ["zombie"],
+      "custom": {"weight":1}
+    },
+    {
+      "id": "z_spawn3",
+      "name": "Zombie C",
+      "type": "spawn",
+      "prefab": "zombie_spawn",
+      "position": {"x":0,"y":0,"z":4},
+      "rotation": {"x":0,"y":225,"z":0},
+      "scale": {"x":1,"y":1,"z":1},
+      "collider": {"enabled": false, "shape":"sphere", "size":{"x":1,"y":1,"z":1}},
+      "tags": ["zombie"],
+      "custom": {"weight":2}
+    }
+  ],
+  "meta": {"selection": []}
+}
