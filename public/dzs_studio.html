@@ -6,118 +6,195 @@
     <title>DZS Script Studio</title>
     <style>
       :root{
-        --bg: #0d0f12;
-        --panel: rgba(20,20,26,0.7);
-        --panel-2: rgba(10,10,14,0.7);
-        --border: rgba(255,255,255,0.08);
-        --text: #f3f3f3;
-        --muted: rgba(255,255,255,0.6);
-        --accent: #f6b24d;
-        --danger: #ff9060;
-        --ok: #70d28c;
-        --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono";
+        --vscode-bg: #1e1e1e;
+        --vscode-panel: #1e1e1e;
+        --vscode-titlebar: #3c3c3c;
+        --vscode-activity: #333333;
+        --vscode-sidebar: #252526;
+        --vscode-secondary: #252526;
+        --vscode-border: #3c3c3c;
+        --vscode-muted: #9da1a6;
+        --vscode-text: #d4d4d4;
+        --vscode-input: #3c3c3c;
+        --vscode-input-border: #5a5a5a;
+        --vscode-tab-active: #1e1e1e;
+        --vscode-tab-inactive: #2d2d2d;
+        --vscode-tab-border: #252526;
+        --vscode-accent: #007acc;
+        --vscode-accent-2: #0e639c;
+        --vscode-statusbar: #007acc;
+        --vscode-statusbar-text: #ffffff;
+        --mono: "Cascadia Code", Consolas, "Liberation Mono", Menlo, Monaco, monospace;
       }
       *{ box-sizing: border-box; }
-      body{
+      html, body{
+        height: 100%;
         margin: 0;
-        color: var(--text);
-        background: radial-gradient(1200px 600px at 20% -10%, #1b1f2a, #0c0d12 60%);
-        font-family: "Trebuchet MS", "Segoe UI", sans-serif;
       }
-      header{
-        padding: 16px 20px 12px 20px;
-        border-bottom: 1px solid var(--border);
-        background: linear-gradient(180deg, rgba(0,0,0,0.6), rgba(0,0,0,0.2));
+      body{
+        background: var(--vscode-bg);
+        color: var(--vscode-text);
+        font-family: "Segoe UI", "Segoe UI Variable", system-ui, sans-serif;
       }
-      .title{
-        font-weight: 900;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        font-size: 16px;
+      button, input{
+        font-family: inherit;
+        color: inherit;
       }
-      .header-row{
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px 20px;
+      .app{
+        height: 100%;
+        display: grid;
+        grid-template-rows: 32px 1fr 22px;
+      }
+      .titlebar{
+        background: var(--vscode-titlebar);
+        border-bottom: 1px solid #2b2b2b;
+        display: grid;
+        grid-template-columns: 220px 1fr 140px;
         align-items: center;
-        margin-top: 10px;
+        padding: 0 8px;
+        gap: 8px;
+        font-size: 12px;
       }
-      .field{
+      .title-left{
         display: flex;
         align-items: center;
         gap: 8px;
-        font-size: 12px;
-        color: var(--muted);
       }
-      .field input{
-        background: rgba(0,0,0,0.35);
-        border: 1px solid var(--border);
-        color: var(--text);
-        padding: 6px 8px;
-        border-radius: 8px;
-        font-family: var(--mono);
-        font-size: 12px;
-        width: 160px;
+      .app-icon{
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+        background: linear-gradient(135deg, #1f6feb, #007acc);
+        box-shadow: 0 0 0 1px rgba(0,0,0,0.4);
       }
-      .status{
-        font-size: 12px;
-        color: var(--muted);
-      }
-      .btn{
-        border: 1px solid rgba(255,255,255,0.1);
-        background: rgba(0,0,0,0.4);
-        color: var(--text);
-        padding: 7px 12px;
-        border-radius: 10px;
-        cursor: pointer;
-        font-size: 12px;
-        font-weight: 700;
+      .title{
+        font-weight: 600;
         letter-spacing: 0.02em;
       }
-      .btn.primary{
-        background: rgba(246,178,77,0.18);
-        border-color: rgba(246,178,77,0.5);
+      .command-center{
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        justify-content: center;
       }
-      .btn:disabled{
-        opacity: 0.5;
-        cursor: not-allowed;
+      .cmd-field{
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--vscode-muted);
+        font-size: 11px;
       }
-      main{
-        padding: 14px 16px;
+      .cmd-field input{
+        height: 22px;
+        padding: 2px 8px;
+        width: 140px;
+        background: var(--vscode-input);
+        border: 1px solid var(--vscode-input-border);
+        border-radius: 4px;
+        font-size: 11px;
+        font-family: var(--mono);
+      }
+      .input{
+        height: 24px;
+        padding: 2px 8px;
+        background: var(--vscode-input);
+        border: 1px solid var(--vscode-input-border);
+        border-radius: 4px;
+        font-size: 11px;
+        color: var(--vscode-text);
+        width: 100%;
+      }
+      .cmd-btn{
+        height: 22px;
+        padding: 2px 10px;
+        border-radius: 4px;
+        border: 1px solid var(--vscode-input-border);
+        background: #2d2d2d;
+        cursor: pointer;
+        font-size: 11px;
+      }
+      .window-controls{
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 6px;
+      }
+      .window-btn{
+        width: 12px;
+        height: 12px;
+        border-radius: 2px;
+        background: #2b2b2b;
+        border: 1px solid #1e1e1e;
+      }
+      .workbench{
         display: grid;
-        grid-template-rows: 1fr 180px;
-        gap: 12px;
-        height: calc(100vh - 84px);
-      }
-      .grid{
-        display: grid;
-        grid-template-columns: 280px 1fr 320px;
-        gap: 12px;
+        grid-template-columns: 48px 280px 1fr 320px;
         min-height: 0;
       }
-      .card{
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        padding: 10px 12px;
+      .activitybar{
+        background: var(--vscode-activity);
+        border-right: 1px solid var(--vscode-border);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 8px 0;
+        gap: 10px;
+      }
+      .activity-item{
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
+        display: grid;
+        place-items: center;
+        color: #c5c5c5;
+        cursor: pointer;
+      }
+      .activity-item.active{
+        background: #2a2d2e;
+        box-shadow: inset 0 0 0 1px #3c3c3c;
+        color: #ffffff;
+      }
+      .activity-item svg{
+        width: 18px;
+        height: 18px;
+        fill: currentColor;
+      }
+      .sidebar, .secondarybar{
+        background: var(--vscode-sidebar);
+        border-right: 1px solid var(--vscode-border);
+        display: flex;
+        flex-direction: column;
         min-height: 0;
+      }
+      .secondarybar{
+        background: var(--vscode-secondary);
+        border-left: 1px solid var(--vscode-border);
+        border-right: none;
+      }
+      .sidebar-header{
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--vscode-border);
+        font-size: 11px;
+        color: var(--vscode-muted);
+        letter-spacing: 0.06em;
+      }
+      .sidebar-section{
+        padding: 8px 8px 0 8px;
         display: flex;
         flex-direction: column;
         gap: 8px;
+        min-height: 0;
       }
-      .section-title{
-        font-weight: 900;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
+      .sidebar-section-title{
         font-size: 11px;
-        opacity: 0.9;
+        color: var(--vscode-muted);
+        letter-spacing: 0.06em;
+        padding: 0 4px;
       }
       .list{
         overflow: auto;
         min-height: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
+        padding: 2px 4px 8px 4px;
       }
       .row{
         display: flex;
@@ -125,101 +202,304 @@
         gap: 8px;
       }
       .library-item{
-        background: var(--panel-2);
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 8px 10px;
+        padding: 6px 6px;
+        border-radius: 4px;
         cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .library-item:hover{
+        background: #2a2d2e;
       }
       .library-item h4{
         margin: 0;
-        font-size: 13px;
-        font-weight: 900;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--vscode-text);
       }
       .library-item p{
-        margin: 4px 0 0 0;
-        font-size: 12px;
-        color: var(--muted);
+        margin: 0;
+        font-size: 11px;
+        color: var(--vscode-muted);
       }
       .badge{
-        padding: 4px 6px;
-        border-radius: 8px;
-        font-size: 11px;
-        font-weight: 800;
-        border: 1px solid var(--border);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: 700;
+        border: 1px solid #3c3c3c;
+        letter-spacing: 0.04em;
       }
-      .badge.ok{ border-color: rgba(112,210,140,0.6); color: var(--ok); }
-      .badge.off{ border-color: rgba(255,144,96,0.6); color: var(--danger); }
-      #editor{
-        flex: 1;
+      .badge.ok{ color: #89d185; border-color: #89d185; }
+      .badge.off{ color: #f48771; border-color: #f48771; }
+      .editor-area{
+        display: grid;
+        grid-template-rows: 32px 28px 1fr 200px;
         min-height: 0;
-        border-radius: 12px;
-        overflow: hidden;
-        border: 1px solid var(--border);
+        background: var(--vscode-bg);
+      }
+      .editor-tabs{
+        display: flex;
+        align-items: center;
+        background: var(--vscode-tab-inactive);
+        border-bottom: 1px solid var(--vscode-tab-border);
+      }
+      .tab{
+        height: 32px;
+        padding: 0 12px;
+        display: flex;
+        align-items: center;
+        background: var(--vscode-tab-inactive);
+        border-right: 1px solid var(--vscode-tab-border);
+        font-size: 12px;
+        color: #cccccc;
+      }
+      .tab.active{
+        background: var(--vscode-tab-active);
+        color: #ffffff;
+        border-bottom: 2px solid var(--vscode-accent);
+      }
+      .tab-label{
+        font-family: var(--mono);
+      }
+      .editor-toolbar{
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 8px;
+        border-bottom: 1px solid var(--vscode-border);
+        background: #252526;
+        font-size: 11px;
+      }
+      .toolbar-left{
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .toolbar-right{
+        margin-left: auto;
+        color: var(--vscode-muted);
+        font-size: 11px;
+      }
+      .btn{
+        height: 22px;
+        padding: 0 10px;
+        border-radius: 4px;
+        border: 1px solid #3c3c3c;
+        background: #2d2d2d;
+        cursor: pointer;
+        font-size: 11px;
+      }
+      .btn.primary{
+        background: var(--vscode-accent);
+        border-color: var(--vscode-accent);
+        color: #ffffff;
+      }
+      .btn:disabled{
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      #editor{
+        min-height: 0;
+        height: 100%;
+      }
+      .panel{
+        border-top: 1px solid var(--vscode-border);
+        background: var(--vscode-panel);
+        display: grid;
+        grid-template-rows: 28px 1fr;
+        min-height: 0;
+      }
+      .panel-tabs{
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 8px;
+        background: #252526;
+        border-bottom: 1px solid var(--vscode-border);
+      }
+      .panel-tab{
+        height: 22px;
+        padding: 0 10px;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        background: transparent;
+        color: var(--vscode-muted);
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .panel-tab.active{
+        color: #ffffff;
+        border-color: #3c3c3c;
+        background: #1f1f1f;
+      }
+      .panel-body{
+        min-height: 0;
+        padding: 8px;
+      }
+      .panel-view{
+        display: none;
+        height: 100%;
+        min-height: 0;
+      }
+      .panel-view.active{
+        display: block;
       }
       #problems, #output{
-        overflow: auto;
-        min-height: 0;
-        font-size: 12px;
-        color: var(--muted);
         font-family: var(--mono);
+        font-size: 12px;
+        color: var(--vscode-text);
+        height: 100%;
+        overflow: auto;
+      }
+      .statusbar{
+        background: var(--vscode-statusbar);
+        color: var(--vscode-statusbar-text);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 10px;
+        font-size: 11px;
+      }
+      .status-left, .status-right{
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .status-item{
+        display: flex;
+        align-items: center;
+        gap: 6px;
       }
       .mono{
         font-family: var(--mono);
       }
-      @media (max-width: 1100px){
-        main{ height: auto; }
-        .grid{ grid-template-columns: 1fr; }
+      @media (max-width: 1200px){
+        .workbench{
+          grid-template-columns: 48px 220px 1fr;
+        }
+        .secondarybar{
+          display: none;
+        }
+      }
+      @media (max-width: 900px){
+        .workbench{
+          grid-template-columns: 48px 1fr;
+        }
+        .sidebar{
+          display: none;
+        }
+        .command-center{
+          justify-content: flex-start;
+          overflow: hidden;
+        }
       }
     </style>
   </head>
   <body>
-    <header>
-      <div class="title">DZS Script Studio</div>
-      <div class="header-row">
-        <label class="field">Match ID <input id="matchId" placeholder="match id" /></label>
-        <label class="field">Client ID <input id="clientId" placeholder="client id" /></label>
-        <div class="status" id="statusLine">Status: unknown</div>
-        <button class="btn" id="refreshBtn">Refresh</button>
+    <div class="app">
+      <div class="titlebar">
+        <div class="title-left">
+          <div class="app-icon"></div>
+          <div class="title">DZS Script Studio</div>
+        </div>
+        <div class="command-center">
+          <label class="cmd-field">Match ID <input id="matchId" placeholder="match id" /></label>
+          <label class="cmd-field">Client ID <input id="clientId" placeholder="client id" /></label>
+          <button class="cmd-btn" id="refreshBtn">Refresh</button>
+        </div>
+        <div class="window-controls">
+          <div class="window-btn"></div>
+          <div class="window-btn"></div>
+          <div class="window-btn"></div>
+        </div>
       </div>
-    </header>
-    <main>
-      <div class="grid">
-        <section class="card">
-          <div class="section-title">Library</div>
-          <input class="mono" id="librarySearch" placeholder="Search scripts" />
-          <div class="list" id="libraryList"></div>
-        </section>
-        <section class="card">
-          <div class="section-title">Editor</div>
-          <div class="row">
-            <div class="mono" id="fileLabel">untitled.dzs</div>
-            <div style="flex:1"></div>
-            <button class="btn" id="validateBtn">Validate</button>
-            <button class="btn primary" id="injectBtn">Inject/Enable</button>
-            <button class="btn" id="downloadBtn">Download .dzs</button>
-            <button class="btn" id="importBtn">Import .dzs</button>
+      <div class="workbench">
+        <aside class="activitybar">
+          <div class="activity-item active" title="Explorer">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 4h6l2 2h8v14H4V4zm2 4v10h12V8H6z" />
+            </svg>
           </div>
-          <div class="status" id="hostHint">Host-only actions require lobby + host.</div>
+          <div class="activity-item" title="Search">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 14 15.5l.3.3v.8L20 21l1-1-5.5-5.5zM10 15a5 5 0 1 1 0-10 5 5 0 0 1 0 10z" />
+            </svg>
+          </div>
+          <div class="activity-item" title="Source Control">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M15 7a3 3 0 0 0-2.8 2H9.8a3 3 0 1 0 0 2h2.4a3 3 0 1 0 2.8-4z" />
+            </svg>
+          </div>
+          <div class="activity-item" title="Run and Debug">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 4l14 8-14 8V4zm9 2.5v11l6-5.5-6-5.5z" />
+            </svg>
+          </div>
+          <div class="activity-item" title="Extensions">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 4h4v4H7V4zm6 0h4v4h-4V4zM7 10h4v4H7v-4zm6 0h4v4h-4v-4zM7 16h4v4H7v-4zm6 0h4v4h-4v-4z" />
+            </svg>
+          </div>
+        </aside>
+        <aside class="sidebar">
+          <div class="sidebar-header">EXPLORER</div>
+          <div class="sidebar-section">
+            <div class="sidebar-section-title">LIBRARY</div>
+            <input class="input mono" id="librarySearch" placeholder="Search scripts" />
+            <div class="list" id="libraryList"></div>
+          </div>
+        </aside>
+        <section class="editor-area">
+          <div class="editor-tabs">
+            <div class="tab active">
+              <span class="tab-label" id="fileLabel">untitled.dzs</span>
+            </div>
+          </div>
+          <div class="editor-toolbar">
+            <div class="toolbar-left">
+              <button class="btn" id="validateBtn">Validate</button>
+              <button class="btn primary" id="injectBtn">Inject/Enable</button>
+              <button class="btn" id="downloadBtn">Download .dzs</button>
+              <button class="btn" id="importBtn">Import .dzs</button>
+            </div>
+            <div class="toolbar-right" id="hostHint">Host-only actions require lobby + host.</div>
+          </div>
           <div id="editor"></div>
+          <div class="panel">
+            <div class="panel-tabs">
+              <button class="panel-tab active" id="panelProblemsTab">PROBLEMS</button>
+              <button class="panel-tab" id="panelOutputTab">OUTPUT</button>
+            </div>
+            <div class="panel-body">
+              <div class="panel-view active" id="problemsView">
+                <div id="problems"></div>
+              </div>
+              <div class="panel-view" id="outputView">
+                <div id="output"></div>
+              </div>
+            </div>
+          </div>
           <input type="file" id="fileInput" accept=".dzs" style="display:none" />
         </section>
-        <section class="card">
-          <div class="section-title">Installed</div>
+        <aside class="secondarybar">
+          <div class="sidebar-header">INSTALLED</div>
           <div class="list" id="installedList"></div>
-        </section>
+        </aside>
       </div>
-      <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <div style="display:flex;flex-direction:column;gap:6px;min-height:0;">
-          <div class="section-title">Problems</div>
-          <div id="problems"></div>
+      <div class="statusbar">
+        <div class="status-left">
+          <div class="status-item">DZS</div>
+          <div class="status-item" id="statusLine">Status: unknown</div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:6px;min-height:0;">
-          <div class="section-title">Output</div>
-          <div id="output"></div>
+        <div class="status-right">
+          <div class="status-item">UTF-8</div>
+          <div class="status-item">CRLF</div>
+          <div class="status-item">Spaces: 2</div>
         </div>
       </div>
-    </main>
+    </div>
     <script type="module" src="/public/dzs_studio.js"></script>
   </body>
 </html>

@@ -248,6 +248,9 @@ export class LobbyController {
     this.matchMode = payload.mode || this.matchMode;
     this.state.setMode(mode);
     this.state.setHostId(payload.hostPlayerId || null);
+    if(Array.isArray(payload.mapPool) && payload.mapPool.length){
+      this.state.setMaps(payload.mapPool);
+    }
     const players = (payload.players || []).map(p=>({
       id: String(p.id),
       name: p.name || `Player${p.id}`,

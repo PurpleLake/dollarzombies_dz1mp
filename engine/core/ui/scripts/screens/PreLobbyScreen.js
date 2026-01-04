@@ -20,17 +20,19 @@ function listItem({ title, meta, desc, selected, disabled, onSelect }){
 
 export function PreLobbyScreen({
   mode = "zm",
+  matchType = "public",
   maps = [],
+  customMaps = [],
   selectedMapId = null,
-  gamemodes = [],
-  selectedGamemode = null,
   preferSolo = false,
   onSelectMap,
-  onSelectGamemode,
+  onSelectMatchType,
   onEditClass,
   onBack,
-  onFindMatch,
+  onFindPublicGame,
+  onCreatePrivateMatch,
   onPlaySolo,
+  onImportMap,
 }){
   const screen = document.createElement("div");
   screen.className = "dz-screen";
@@ -58,12 +60,22 @@ export function PreLobbyScreen({
   const left = document.createElement("div");
   left.className = "dz-prelobby-left";
 
-  const leftTitle = document.createElement("div");
-  leftTitle.className = "dz-prelobby-section-title";
-  leftTitle.textContent = mode === "mp" ? "GAME MODES" : "MAP SELECT";
+  const typeTitle = document.createElement("div");
+  typeTitle.className = "dz-prelobby-section-title";
+  typeTitle.textContent = "MATCH TYPE";
 
-  const leftList = document.createElement("div");
-  leftList.className = "dz-prelobby-list";
+  const typeList = document.createElement("div");
+  typeList.className = "dz-prelobby-list";
+
+  const mapTitle = document.createElement("div");
+  mapTitle.className = "dz-prelobby-section-title";
+  mapTitle.textContent = "MAP SELECT";
+
+  const mapList = document.createElement("div");
+  mapList.className = "dz-prelobby-list";
+
+  const mapActions = document.createElement("div");
+  mapActions.className = "dz-prelobby-subactions";
 
   const right = document.createElement("div");
   right.className = "dz-prelobby-right";
@@ -74,78 +86,122 @@ export function PreLobbyScreen({
   const info = document.createElement("div");
   info.className = "dz-prelobby-info";
 
-  let currentMap = selectedMapId || maps.find(m=>!m.disabled)?.id || maps[0]?.id || null;
-  let currentMode = selectedGamemode || gamemodes[0]?.id || null;
+  const combinedMaps = [...maps, ...customMaps];
+  let currentMap = selectedMapId || combinedMaps.find(m=>!m.disabled)?.id || combinedMaps[0]?.id || null;
+  let currentMatchType = matchType || "public";
 
-  function renderLeft(){
-    leftList.innerHTML = "";
-    if(mode === "mp"){
-      for(const gm of gamemodes){
-        const selected = String(gm.id) === String(currentMode);
-        leftList.appendChild(listItem({
-          title: gm.name || gm.id,
-          meta: gm.code || gm.id,
-          desc: gm.desc || "",
-          selected,
-          disabled: false,
-          onSelect: ()=>{
-            currentMode = gm.id;
-            onSelectGamemode?.(gm.id);
-            renderLeft();
-            renderRight();
-          }
-        }));
+  function renderMatchTypes(){
+    typeList.innerHTML = "";
+    const typeDefs = [
+      {
+        id: "public",
+        title: mode === "mp" ? "Public Match" : "Public Co-op",
+        meta: "MATCHMAKING",
+        desc: mode === "mp"
+          ? "Search online and match by gametype."
+          : "Search online for a co-op lobby."
+      },
+      {
+        id: "private",
+        title: "Private Match",
+        meta: "HOST",
+        desc: "Create a lobby and invite friends."
       }
-    } else {
-      for(const m of maps){
-        const selected = String(m.id) === String(currentMap);
-        leftList.appendChild(listItem({
-          title: m.name || m.id,
-          meta: m.id || "",
-          desc: m.desc || "",
-          selected,
-          disabled: Boolean(m.disabled),
-          onSelect: ()=>{
-            if(m.disabled) return;
-            currentMap = m.id;
-            onSelectMap?.(m.id);
-            renderLeft();
-            renderRight();
-          }
-        }));
-      }
+    ];
+    for(const t of typeDefs){
+      const selected = String(t.id) === String(currentMatchType);
+      typeList.appendChild(listItem({
+        title: t.title,
+        meta: t.meta,
+        desc: t.desc,
+        selected,
+        disabled: false,
+        onSelect: ()=>{
+          currentMatchType = t.id;
+          onSelectMatchType?.(t.id);
+          renderMatchTypes();
+          renderMaps();
+          renderRight();
+        }
+      }));
+    }
+  }
+
+  function renderMaps(){
+    mapList.innerHTML = "";
+    mapActions.innerHTML = "";
+    const showMaps = currentMatchType === "private" || mode !== "mp";
+    mapTitle.style.display = showMaps ? "" : "none";
+    mapList.style.display = showMaps ? "" : "none";
+    mapActions.style.display = currentMatchType === "private" ? "" : "none";
+    if(!showMaps) return;
+    if(!combinedMaps.length){
+      const empty = document.createElement("div");
+      empty.className = "dz-prelobby-info-card";
+      empty.innerHTML = `
+        <div class="dz-prelobby-info-title">NO MAPS</div>
+        <div class="dz-prelobby-info-body">Add a custom map to get started.</div>
+      `;
+      mapList.appendChild(empty);
+      return;
+    }
+    for(const m of combinedMaps){
+      const selected = String(m.id) === String(currentMap);
+      const meta = m.isCustom ? "CUSTOM MAP" : (m.id || "");
+      mapList.appendChild(listItem({
+        title: m.name || m.id,
+        meta,
+        desc: m.desc || "",
+        selected,
+        disabled: Boolean(m.disabled),
+        onSelect: ()=>{
+          if(m.disabled) return;
+          currentMap = m.id;
+          onSelectMap?.(m.id);
+          renderMaps();
+          renderRight();
+        }
+      }));
+    }
+    if(onImportMap){
+      const importBtn = Button({ text: "Import Map", variant: "secondary", onClick: ()=>onImportMap?.() });
+      importBtn.classList.add("dz-prelobby-btn", "is-secondary", "is-subaction");
+      mapActions.appendChild(importBtn);
     }
   }
 
   function renderRight(){
     preview.innerHTML = "";
     info.innerHTML = "";
-    if(mode === "mp"){
-      const gm = gamemodes.find(g=>String(g.id) === String(currentMode)) || gamemodes[0];
-      preview.classList.add("is-mode");
-      preview.style.backgroundImage = "";
-      const title = document.createElement("div");
-      title.className = "dz-prelobby-preview-title";
-      title.textContent = gm?.name || "Game Mode";
-      const meta = document.createElement("div");
-      meta.className = "dz-prelobby-preview-meta";
-      meta.textContent = gm?.code || gm?.id || "";
-      const desc = document.createElement("div");
-      desc.className = "dz-prelobby-preview-desc";
-      desc.textContent = gm?.desc || "Eliminate the enemy team.";
-      preview.appendChild(title);
-      preview.appendChild(meta);
-      preview.appendChild(desc);
+    if(currentMatchType === "public"){
+      if(mode === "mp"){
+        preview.classList.add("is-mode");
+        preview.style.backgroundImage = "";
+        const title = document.createElement("div");
+        title.className = "dz-prelobby-preview-title";
+        title.textContent = "Public Match";
+        const meta = document.createElement("div");
+        meta.className = "dz-prelobby-preview-meta";
+        meta.textContent = "MATCHMAKING";
+        const desc = document.createElement("div");
+        desc.className = "dz-prelobby-preview-desc";
+        desc.textContent = "Pick a gametype, then search for an online lobby.";
+        preview.appendChild(title);
+        preview.appendChild(meta);
+        preview.appendChild(desc);
 
-      const detail = document.createElement("div");
-      detail.className = "dz-prelobby-info-card";
-      detail.innerHTML = `
-        <div class="dz-prelobby-info-title">RULES</div>
-        <div class="dz-prelobby-info-body">Score limit and time settings are applied in the lobby.</div>
-      `;
-      info.appendChild(detail);
-    } else {
-      const m = maps.find(mp=>String(mp.id) === String(currentMap)) || maps[0];
+        const detail = document.createElement("div");
+        detail.className = "dz-prelobby-info-card";
+        detail.innerHTML = `
+          <div class="dz-prelobby-info-title">MATCHMAKING</div>
+          <div class="dz-prelobby-info-body">Gametype selection happens before search. Ready up in the lobby once found.</div>
+        `;
+        info.appendChild(detail);
+        return;
+      }
+    }
+    if(currentMatchType !== "public" || mode !== "mp"){
+      const m = combinedMaps.find(mp=>String(mp.id) === String(currentMap)) || combinedMaps[0];
       preview.classList.remove("is-mode");
       if(m?.preview) preview.style.backgroundImage = `url(${m.preview})`;
       else preview.style.backgroundImage = "";
@@ -154,29 +210,51 @@ export function PreLobbyScreen({
       title.textContent = m?.name || "Map";
       const meta = document.createElement("div");
       meta.className = "dz-prelobby-preview-meta";
-      meta.textContent = "ZOMBIES";
+      meta.textContent = m?.isCustom ? "CUSTOM MAP" : (mode === "mp" ? "MULTIPLAYER" : "ZOMBIES");
       const desc = document.createElement("div");
       desc.className = "dz-prelobby-preview-desc";
-      desc.textContent = m?.desc || "Survive as long as you can.";
+      desc.textContent = m?.desc || (mode === "mp" ? "Team up and hold the lanes." : "Survive as long as you can.");
       preview.appendChild(title);
       preview.appendChild(meta);
       preview.appendChild(desc);
 
       const detail = document.createElement("div");
       detail.className = "dz-prelobby-info-card";
-      detail.innerHTML = `
-        <div class="dz-prelobby-info-title">MATCH NOTES</div>
-        <div class="dz-prelobby-info-body">Co-op survival. Loadouts are pulled from your Zombies classes.</div>
-      `;
+      if(currentMatchType === "private"){
+        detail.innerHTML = `
+          <div class="dz-prelobby-info-title">PRIVATE LOBBY</div>
+          <div class="dz-prelobby-info-body">Host selects the map pool and starts when everyone is ready.</div>
+        `;
+      } else {
+        detail.innerHTML = `
+          <div class="dz-prelobby-info-title">PUBLIC MATCH</div>
+          <div class="dz-prelobby-info-body">Search for a co-op lobby, then ready up once matched.</div>
+        `;
+      }
       info.appendChild(detail);
+
+      const customCount = combinedMaps.filter(mp=>mp.isCustom).length;
+      if(customCount){
+        const customInfo = document.createElement("div");
+        customInfo.className = "dz-prelobby-info-card";
+        customInfo.innerHTML = `
+          <div class="dz-prelobby-info-title">CUSTOM MAPS</div>
+          <div class="dz-prelobby-info-body">${customCount} custom map${customCount === 1 ? "" : "s"} available for private play.</div>
+        `;
+        info.appendChild(customInfo);
+      }
     }
   }
 
-  renderLeft();
+  renderMatchTypes();
+  renderMaps();
   renderRight();
 
-  left.appendChild(leftTitle);
-  left.appendChild(leftList);
+  left.appendChild(typeTitle);
+  left.appendChild(typeList);
+  left.appendChild(mapTitle);
+  left.appendChild(mapList);
+  left.appendChild(mapActions);
 
   right.appendChild(preview);
 
@@ -203,19 +281,29 @@ export function PreLobbyScreen({
   actions.appendChild(backBtn);
 
   if(mode === "mp"){
-    const findBtn = Button({ text: "Find Game", onClick: ()=>onFindMatch?.() });
-    findBtn.classList.add("dz-prelobby-btn", "is-primary");
-    actions.appendChild(findBtn);
+    if(currentMatchType === "public"){
+      const findBtn = Button({ text: "Find Public Game", onClick: ()=>onFindPublicGame?.() });
+      findBtn.classList.add("dz-prelobby-btn", "is-primary");
+      actions.appendChild(findBtn);
+    } else {
+      const privateBtn = Button({ text: "Create Private Lobby", onClick: ()=>onCreatePrivateMatch?.() });
+      privateBtn.classList.add("dz-prelobby-btn", "is-primary");
+      actions.appendChild(privateBtn);
+    }
   } else {
-    const findBtn = Button({ text: "Find Match", onClick: ()=>onFindMatch?.() });
+    const primaryLabel = currentMatchType === "public" ? "Find Match" : "Create Private Lobby";
+    const primaryAction = currentMatchType === "public"
+      ? ()=>onFindPublicGame?.()
+      : ()=>onCreatePrivateMatch?.();
+    const primaryBtn = Button({ text: primaryLabel, onClick: primaryAction });
     const soloBtn = Button({ text: "Play Solo", variant: "secondary", onClick: ()=>onPlaySolo?.() });
-    findBtn.classList.add("dz-prelobby-btn", preferSolo ? "is-secondary" : "is-primary");
+    primaryBtn.classList.add("dz-prelobby-btn", preferSolo ? "is-secondary" : "is-primary");
     soloBtn.classList.add("dz-prelobby-btn", preferSolo ? "is-primary" : "is-secondary");
     if(preferSolo){
       actions.appendChild(soloBtn);
-      actions.appendChild(findBtn);
+      actions.appendChild(primaryBtn);
     } else {
-      actions.appendChild(findBtn);
+      actions.appendChild(primaryBtn);
       actions.appendChild(soloBtn);
     }
   }

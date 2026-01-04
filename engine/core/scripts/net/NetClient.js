@@ -238,6 +238,17 @@ if(msg.t === "matchEvent"){
     this._send({ t:"serverList", showAll });
   }
 
+  sendCreateMatch({ mode, gamemode = null, isPrivate = false, mapPool = null } = {}){
+    const payload = {
+      t:"createMatch",
+      mode,
+      gamemode,
+      isPrivate: Boolean(isPrivate),
+      mapPool: Array.isArray(mapPool) ? mapPool : null,
+    };
+    this._send(payload);
+  }
+
   sendJoinMatch(matchId){
     this._send({ t:"joinMatch", matchId });
   }

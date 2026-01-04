@@ -43,6 +43,10 @@ const DZS_LIBRARY_DIRS = [
   path.join(__dirname, "public", "dzs_samples"),
 ];
 
+const DZS_PROJECTS_DIR = process.env.DZS_PROJECTS_DIR
+  ? path.resolve(process.env.DZS_PROJECTS_DIR)
+  : path.join(__dirname, "dzs_projects");
+
 function readJsonBody(req){
   return new Promise((resolve, reject)=>{
     let raw = "";
@@ -59,6 +63,24 @@ function sendJson(res, code, obj){
   const body = JSON.stringify(obj || {});
   res.writeHead(code, { "Content-Type": "application/json; charset=utf-8" });
   res.end(body);
+}
+
+function ensureDir(dir){
+  try{ fs.mkdirSync(dir, { recursive: true }); } catch {}
+}
+
+function readJsonFile(filePath, fallback = null){
+  try{
+    const raw = fs.readFileSync(filePath, "utf8");
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJsonFile(filePath, data){
+  const body = JSON.stringify(data || {}, null, 2);
+  fs.writeFileSync(filePath, body);
 }
 
 function parseHeaderMeta(text, fallbackName){
@@ -80,6 +102,95 @@ function parseHeaderMeta(text, fallbackName){
     else if(key === "tags") meta.tags = val.split(/[,\s]+/).map(t=>t.trim()).filter(Boolean);
   }
   return meta;
+}
+
+function getProjectRoot(projectId){
+  const clean = String(projectId || "").trim();
+  if(!clean) return null;
+  const full = safeJoin(DZS_PROJECTS_DIR, "/" + clean);
+  if(!full) return null;
+  return full;
+}
+
+function getProjectMetaPath(projectRoot){
+  return path.join(projectRoot, "dzs_project.json");
+}
+
+function getProjectManifestPath(projectRoot){
+  return path.join(projectRoot, "dzs_manifest.json");
+}
+
+function getProjectScriptsDir(projectRoot){
+  return path.join(projectRoot, "scripts");
+}
+
+function getProjectVersionsDir(projectRoot){
+  return path.join(projectRoot, ".versions");
+}
+
+function listProjectFiles(projectRoot){
+  const files = [];
+  const baseDir = getProjectScriptsDir(projectRoot);
+  if(!fs.existsSync(baseDir)) return files;
+  const stack = [baseDir];
+  while(stack.length){
+    const dir = stack.pop();
+    const items = fs.readdirSync(dir, { withFileTypes: true });
+    for(const item of items){
+      const full = path.join(dir, item.name);
+      if(item.isDirectory()){
+        stack.push(full);
+      } else if(item.isFile()){
+        const rel = path.relative(baseDir, full).replace(/\\/g, "/");
+        files.push(rel);
+      }
+    }
+  }
+  files.sort((a, b)=> a.localeCompare(b));
+  return files;
+}
+
+function resolveProjectFile(projectRoot, relPath){
+  const base = getProjectScriptsDir(projectRoot);
+  const clean = String(relPath || "").replace(/\\/g, "/");
+  if(!clean) return null;
+  const full = safeJoin(base, "/" + clean);
+  if(!full) return null;
+  return full;
+}
+
+function ensureProjectLayout(projectRoot){
+  ensureDir(projectRoot);
+  ensureDir(getProjectScriptsDir(projectRoot));
+  ensureDir(getProjectVersionsDir(projectRoot));
+}
+
+function initProject(projectRoot, { name, description } = {}){
+  ensureProjectLayout(projectRoot);
+  const metaPath = getProjectMetaPath(projectRoot);
+  const existing = readJsonFile(metaPath, null);
+  if(!existing){
+    writeJsonFile(metaPath, {
+      name: String(name || path.basename(projectRoot)),
+      description: String(description || ""),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  }
+  const manifestPath = getProjectManifestPath(projectRoot);
+  if(!fs.existsSync(manifestPath)){
+    writeJsonFile(manifestPath, {
+      files: ["scripts/main.dzs"],
+    });
+  }
+  const mainFile = path.join(getProjectScriptsDir(projectRoot), "main.dzs");
+  if(!fs.existsSync(mainFile)){
+    fs.writeFileSync(mainFile, "// @name Main Script\n// @desc Entry DZS script\n\non start {\n  log Project booted\n}\n");
+  }
+  const versionsIndex = path.join(getProjectVersionsDir(projectRoot), "index.json");
+  if(!fs.existsSync(versionsIndex)){
+    writeJsonFile(versionsIndex, { versions: [] });
+  }
 }
 
 function buildLibraryList(){
@@ -250,6 +361,251 @@ const server = http.createServer((req, res) => {
       }
       const text = fs.readFileSync(full, "utf8");
       sendJson(res, 200, { ok: true, filename, text });
+      return;
+    }
+
+    if(pathname === "/api/dzs/projects/list" && req.method === "GET"){
+      ensureDir(DZS_PROJECTS_DIR);
+      const items = fs.readdirSync(DZS_PROJECTS_DIR, { withFileTypes: true });
+      const projects = [];
+      for(const item of items){
+        if(!item.isDirectory()) continue;
+        const root = path.join(DZS_PROJECTS_DIR, item.name);
+        const meta = readJsonFile(getProjectMetaPath(root), null);
+        if(!meta) continue;
+        projects.push({
+          id: item.name,
+          name: meta.name || item.name,
+          description: meta.description || "",
+          updatedAt: meta.updatedAt || null,
+        });
+      }
+      projects.sort((a, b)=> String(a.name).localeCompare(String(b.name)));
+      sendJson(res, 200, { ok: true, projects });
+      return;
+    }
+
+    if(pathname === "/api/dzs/projects/create" && req.method === "POST"){
+      readJsonBody(req).then((body)=>{
+        ensureDir(DZS_PROJECTS_DIR);
+        const name = String(body?.name || "").trim();
+        const description = String(body?.description || "");
+        const id = String(body?.id || "").trim() || name.replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
+        if(!id){
+          sendJson(res, 400, { ok: false, error: "missing_id" });
+          return;
+        }
+        const root = getProjectRoot(id);
+        if(!root){
+          sendJson(res, 400, { ok: false, error: "bad_id" });
+          return;
+        }
+        if(fs.existsSync(root)){
+          sendJson(res, 409, { ok: false, error: "exists" });
+          return;
+        }
+        initProject(root, { name: name || id, description });
+        sendJson(res, 200, { ok: true, id });
+      }).catch((err)=>{
+        sendJson(res, 400, { ok: false, error: "bad_json", detail: String(err?.message || err) });
+      });
+      return;
+    }
+
+    if(pathname === "/api/dzs/projects/meta" && req.method === "GET"){
+      const projectId = u.searchParams.get("projectId") || "";
+      const root = getProjectRoot(projectId);
+      if(!root || !fs.existsSync(root)){
+        sendJson(res, 404, { ok: false, error: "not_found" });
+        return;
+      }
+      const meta = readJsonFile(getProjectMetaPath(root), null);
+      if(!meta){
+        sendJson(res, 404, { ok: false, error: "missing_meta" });
+        return;
+      }
+      sendJson(res, 200, { ok: true, id: projectId, meta });
+      return;
+    }
+
+    if(pathname === "/api/dzs/projects/files" && req.method === "GET"){
+      const projectId = u.searchParams.get("projectId") || "";
+      const root = getProjectRoot(projectId);
+      if(!root || !fs.existsSync(root)){
+        sendJson(res, 404, { ok: false, error: "not_found" });
+        return;
+      }
+      const files = listProjectFiles(root);
+      sendJson(res, 200, { ok: true, files });
+      return;
+    }
+
+    if(pathname === "/api/dzs/projects/file" && req.method === "GET"){
+      const projectId = u.searchParams.get("projectId") || "";
+      const relPath = u.searchParams.get("path") || "";
+      const root = getProjectRoot(projectId);
+      if(!root || !fs.existsSync(root)){
+        sendJson(res, 404, { ok: false, error: "not_found" });
+        return;
+      }
+      const full = resolveProjectFile(root, relPath);
+      if(!full || !fs.existsSync(full)){
+        sendJson(res, 404, { ok: false, error: "file_not_found" });
+        return;
+      }
+      const text = fs.readFileSync(full, "utf8");
+      sendJson(res, 200, { ok: true, path: relPath, text });
+      return;
+    }
+
+    if(pathname === "/api/dzs/projects/file/raw" && req.method === "GET"){
+      const projectId = u.searchParams.get("projectId") || "";
+      const relPath = u.searchParams.get("path") || "";
+      const root = getProjectRoot(projectId);
+      if(!root || !fs.existsSync(root)){
+        res.writeHead(404); res.end("Not found"); return;
+      }
+      const full = resolveProjectFile(root, relPath);
+      if(!full || !fs.existsSync(full)){
+        res.writeHead(404); res.end("Not found"); return;
+      }
+      const ext = path.extname(full).toLowerCase();
+      res.writeHead(200, { "Content-Type": MIME[ext] || "text/plain; charset=utf-8" });
+      fs.createReadStream(full).pipe(res);
+      return;
+    }
+
+    if(pathname === "/api/dzs/projects/save" && req.method === "POST"){
+      readJsonBody(req).then((body)=>{
+        const projectId = String(body?.projectId || "");
+        const relPath = String(body?.path || "");
+        const text = String(body?.text || "");
+        const description = String(body?.description || "Update");
+        const root = getProjectRoot(projectId);
+        if(!root){
+          sendJson(res, 400, { ok: false, error: "bad_project" });
+          return;
+        }
+        if(!fs.existsSync(root)){
+          sendJson(res, 404, { ok: false, error: "not_found" });
+          return;
+        }
+        const full = resolveProjectFile(root, relPath);
+        if(!full){
+          sendJson(res, 400, { ok: false, error: "bad_path" });
+          return;
+        }
+        ensureDir(path.dirname(full));
+        fs.writeFileSync(full, text);
+
+        const versionsDir = getProjectVersionsDir(root);
+        ensureDir(versionsDir);
+        const versionsIndex = path.join(versionsDir, "index.json");
+        const data = readJsonFile(versionsIndex, { versions: [] });
+        const id = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+        const snapPath = path.join(versionsDir, `${id}.dzs`);
+        fs.writeFileSync(snapPath, text);
+        data.versions.push({
+          id,
+          path: relPath,
+          description,
+          timestamp: Date.now(),
+        });
+        writeJsonFile(versionsIndex, data);
+
+        const metaPath = getProjectMetaPath(root);
+        const meta = readJsonFile(metaPath, null);
+        if(meta){
+          meta.updatedAt = Date.now();
+          writeJsonFile(metaPath, meta);
+        }
+        sendJson(res, 200, { ok: true, id });
+      }).catch((err)=>{
+        sendJson(res, 400, { ok: false, error: "bad_json", detail: String(err?.message || err) });
+      });
+      return;
+    }
+
+    if(pathname === "/api/dzs/projects/versions" && req.method === "GET"){
+      const projectId = u.searchParams.get("projectId") || "";
+      const root = getProjectRoot(projectId);
+      if(!root || !fs.existsSync(root)){
+        sendJson(res, 404, { ok: false, error: "not_found" });
+        return;
+      }
+      const versionsIndex = path.join(getProjectVersionsDir(root), "index.json");
+      const data = readJsonFile(versionsIndex, { versions: [] });
+      sendJson(res, 200, { ok: true, versions: data.versions || [] });
+      return;
+    }
+
+    if(pathname === "/api/dzs/projects/manifest" && req.method === "GET"){
+      const projectId = u.searchParams.get("projectId") || "";
+      const root = getProjectRoot(projectId);
+      if(!root || !fs.existsSync(root)){
+        sendJson(res, 404, { ok: false, error: "not_found" });
+        return;
+      }
+      const manifestPath = getProjectManifestPath(root);
+      if(!fs.existsSync(manifestPath)){
+        sendJson(res, 404, { ok: false, error: "missing_manifest" });
+        return;
+      }
+      const manifest = readJsonFile(manifestPath, { files: [] });
+      const files = Array.isArray(manifest.files) ? manifest.files : [];
+      const mapped = files.map((f)=>{
+        const txt = String(f || "");
+        if(!txt) return null;
+        if(/^https?:\/\//i.test(txt) || txt.startsWith("/")) return txt;
+        return `/api/dzs/projects/file/raw?projectId=${encodeURIComponent(projectId)}&path=${encodeURIComponent(txt)}`;
+      }).filter(Boolean);
+      sendJson(res, 200, { files: mapped });
+      return;
+    }
+
+    if(pathname === "/api/dzs/projects/search" && req.method === "GET"){
+      const projectId = u.searchParams.get("projectId") || "";
+      const query = String(u.searchParams.get("q") || "").toLowerCase();
+      const mode = String(u.searchParams.get("mode") || "both");
+      const root = getProjectRoot(projectId);
+      if(!root || !fs.existsSync(root)){
+        sendJson(res, 404, { ok: false, error: "not_found" });
+        return;
+      }
+      if(!query){
+        sendJson(res, 200, { ok: true, results: [] });
+        return;
+      }
+      const files = listProjectFiles(root);
+      const results = [];
+      for(const rel of files){
+        const nameHit = rel.toLowerCase().includes(query);
+        const shouldName = mode === "filename" || mode === "both";
+        const shouldContent = mode === "content" || mode === "both";
+        if(shouldName && nameHit){
+          results.push({ path: rel, line: null, preview: "filename match" });
+          if(!shouldContent) continue;
+        }
+        if(shouldContent){
+          const full = resolveProjectFile(root, rel);
+          if(!full || !fs.existsSync(full)) continue;
+          const text = fs.readFileSync(full, "utf8");
+          const lines = text.split(/\r?\n/);
+          for(let i=0;i<lines.length;i++){
+            const line = lines[i];
+            if(line.toLowerCase().includes(query)){
+              results.push({
+                path: rel,
+                line: i + 1,
+                preview: line.trim().slice(0, 200),
+              });
+              if(results.length > 200) break;
+            }
+          }
+        }
+        if(results.length > 200) break;
+      }
+      sendJson(res, 200, { ok: true, results });
       return;
     }
 
@@ -675,6 +1031,41 @@ server.on("upgrade", (req, sock) => {
           }
           sendQueueStatus(mode);
           tryFormMatches(mode);
+        } else if(msg.t === "createMatch"){
+          const mode = msg.mode === "zombies" ? "zombies" : (msg.mode === "mp" ? "mp" : "solo");
+          if(client.matchId) leaveMatch(client, "createMatch");
+          removeFromQueue(client);
+
+          const mapPool = Array.isArray(msg.mapPool) ? msg.mapPool : null;
+          const settings = {
+            gamemode: mode === "mp" ? String(msg.gamemode || "TDM") : null,
+            isPrivate: Boolean(msg.isPrivate),
+            mapPool,
+            mapName: mapPool && mapPool[0] ? (mapPool[0].name || mapPool[0].id || null) : null,
+          };
+          const matchId = matchManager.createMatch(mode, settings);
+          if(!matchId){
+            wsSend(sock, { t:"joinFailed", matchId: null, reason: "no_slots" });
+            continue;
+          }
+          const res = matchManager.joinMatch(matchId, client);
+          if(!res.ok){
+            wsSend(sock, { t:"joinFailed", matchId, reason: res.reason });
+            continue;
+          }
+          const team = assignTeam(res.match, client.id);
+          wsSend(client.ws, { t:"teamAssigned", matchId, team });
+          const hostId = res.match.hostPlayerId;
+          wsSend(sock, {
+            t:"matchFound",
+            matchId,
+            mode,
+            gamemode: res.match.settings?.gamemode || null,
+            hostPlayerId: hostId,
+            youAreHost: String(client.id) === String(hostId),
+          });
+          matchManager.sendLobbyState(res.match);
+          broadcastMatchState(res.match);
         } else if(msg.t === "queueLeave"){
           const mode = client.queueMode;
           removeFromQueue(client);

@@ -145,6 +145,7 @@ export class MatchManager {
       matchId: match.matchId,
       mode: match.mode,
       gamemode: match.settings?.gamemode || null,
+      mapPool: match.settings?.mapPool || null,
       players,
       hostPlayerId: match.hostPlayerId,
     });

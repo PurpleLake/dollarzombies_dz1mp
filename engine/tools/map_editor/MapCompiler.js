@@ -187,7 +187,14 @@ export class MapCompiler {
       if(!isFiniteNumber(p?.x) || !isFiniteNumber(p?.y)) continue;
       const scale = Number(p.scale || 1);
       const kind = String(p.kind || (p.model ? "model" : "box"));
-      const height = (kind === "sphere") ? (scale * 0.5) : (kind === "cylinder" ? scale : (kind === "tile" ? 0.08 : scale));
+      const sx = toNumber(p.sx, scale);
+      const sy = toNumber(p.sy, (kind === "tile" ? 0.08 : scale));
+      const sz = toNumber(p.sz, scale);
+      const rTop = toNumber(p.rTop, scale * 0.35);
+      const rBottom = toNumber(p.rBottom, scale * 0.35);
+      const h = toNumber(p.h, scale);
+      const r = toNumber(p.r, scale * 0.5);
+      const height = (kind === "sphere") ? (r) : (kind === "cylinder" ? h : (kind === "tile" ? sy : sy));
       const baseY = Number(p.z || 0);
       const pos = { x: Number(p.x), y: baseY + height * 0.5, z: Number(p.y) };
       const color = parseColorHex(p.material?.color, 0x6a4a2c);
@@ -202,34 +209,34 @@ export class MapCompiler {
           });
         } else if(kind === "sphere"){
           ctx.entities.spawnEntity("sphere", pos, {
-            r: scale * 0.5,
+            r,
             color,
             texture: p.material?.texture,
             tag: "dzmap-prop",
           });
         } else if(kind === "cylinder"){
           ctx.entities.spawnEntity("cylinder", pos, {
-            rTop: scale * 0.35,
-            rBottom: scale * 0.35,
-            h: scale,
+            rTop,
+            rBottom,
+            h,
             color,
             texture: p.material?.texture,
             tag: "dzmap-prop",
           });
         } else if(kind === "tile"){
           ctx.entities.spawnEntity("box", pos, {
-            sx: scale,
-            sy: height,
-            sz: scale,
+            sx,
+            sy,
+            sz,
             color,
             texture: p.material?.texture,
             tag: "dzmap-prop",
           });
         } else {
           ctx.entities.spawnEntity("box", pos, {
-            sx: scale,
-            sy: scale,
-            sz: scale,
+            sx,
+            sy,
+            sz,
             color,
             texture: p.material?.texture,
             tag: "dzmap-prop",
@@ -240,7 +247,7 @@ export class MapCompiler {
           x: Number(p.x),
           y: pos.y,
           z: Number(p.y),
-          size: scale,
+          size: sx,
           color,
         });
       }
@@ -254,7 +261,7 @@ export class MapCompiler {
             x: Number(p.x || 0),
             y: baseY,
             z: Number(p.y || 0),
-            r: Number(col.r || (scale * 0.5)),
+            r: Number(col.r || r),
           });
         } else if(colType === "cylinder"){
           mapCtx.colliders.push({
@@ -262,9 +269,9 @@ export class MapCompiler {
             x: Number(p.x || 0),
             y: baseY,
             z: Number(p.y || 0),
-            rTop: Number(col.rTop || (scale * 0.35)),
-            rBottom: Number(col.rBottom || (scale * 0.35)),
-            h: Number(col.h || scale),
+            rTop: Number(col.rTop || rTop),
+            rBottom: Number(col.rBottom || rBottom),
+            h: Number(col.h || h),
           });
         } else {
           mapCtx.colliders.push({
@@ -272,9 +279,9 @@ export class MapCompiler {
             x: Number(p.x || 0),
             y: baseY,
             z: Number(p.y || 0),
-            sx: Number(col.sx || scale),
-            sy: Number(col.sy || height),
-            sz: Number(col.sz || scale),
+            sx: Number(col.sx || sx),
+            sy: Number(col.sy || sy),
+            sz: Number(col.sz || sz),
             rot: Number(p.rot || 0),
           });
         }

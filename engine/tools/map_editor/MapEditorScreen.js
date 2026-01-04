@@ -444,6 +444,13 @@ export function MapEditorScreen({ engine, onClose }){
         material: asset.material,
         collision: asset.collision,
         collider: asset.collider,
+        sx: asset.sx,
+        sy: asset.sy,
+        sz: asset.sz,
+        r: asset.r,
+        rTop: asset.rTop,
+        rBottom: asset.rBottom,
+        h: asset.h,
         scale: Number(asset.scale || 1),
       };
       onMutateProp(item);
@@ -1052,6 +1059,33 @@ export function MapEditorScreen({ engine, onClose }){
       fields.push(makeField({ label:"Scale", value:item.scale || 1, onChange:(v)=>{
         applyInspectorChange((draft, it)=> it.scale = Number(v || 1));
       }, type:"number" }));
+      if(String(item.kind || "box") === "box" || String(item.kind || "box") === "tile"){
+        fields.push(makeField({ label:"Size X", value:item.sx ?? item.scale ?? 1, onChange:(v)=>{
+          applyInspectorChange((draft, it)=> it.sx = Number(v || 1));
+        }, type:"number" }));
+        fields.push(makeField({ label:"Size Y", value:item.sy ?? item.scale ?? 1, onChange:(v)=>{
+          applyInspectorChange((draft, it)=> it.sy = Number(v || 1));
+        }, type:"number" }));
+        fields.push(makeField({ label:"Size Z", value:item.sz ?? item.scale ?? 1, onChange:(v)=>{
+          applyInspectorChange((draft, it)=> it.sz = Number(v || 1));
+        }, type:"number" }));
+      }
+      if(String(item.kind || "box") === "cylinder"){
+        fields.push(makeField({ label:"Radius Top", value:item.rTop ?? item.scale ?? 0.5, onChange:(v)=>{
+          applyInspectorChange((draft, it)=> it.rTop = Number(v || 0.5));
+        }, type:"number" }));
+        fields.push(makeField({ label:"Radius Bottom", value:item.rBottom ?? item.scale ?? 0.5, onChange:(v)=>{
+          applyInspectorChange((draft, it)=> it.rBottom = Number(v || 0.5));
+        }, type:"number" }));
+        fields.push(makeField({ label:"Height", value:item.h ?? item.scale ?? 1, onChange:(v)=>{
+          applyInspectorChange((draft, it)=> it.h = Number(v || 1));
+        }, type:"number" }));
+      }
+      if(String(item.kind || "box") === "sphere"){
+        fields.push(makeField({ label:"Radius", value:item.r ?? (item.scale ? item.scale * 0.5 : 0.5), onChange:(v)=>{
+          applyInspectorChange((draft, it)=> it.r = Number(v || 0.5));
+        }, type:"number" }));
+      }
       fields.push(makeField({ label:"Material", value:item.material?.color || "#ffffff", onChange:(v)=>{
         applyInspectorChange((draft, it)=> it.material = { ...(it.material||{}), color: String(v || "#ffffff") });
       }}));

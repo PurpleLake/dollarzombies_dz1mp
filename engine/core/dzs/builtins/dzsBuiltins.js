@@ -23,6 +23,13 @@ export const BUILTIN_DOCS = Object.freeze([
   { name:"createHudItem", sig:"createHudItem(player, color, w, h, x, y, text, shader)", desc:"Creates a HUD panel item.", example:"id = createHudItem(player, #ffffff, 220, 40, 20, 20, Hello, )" },
   { name:"createHudText", sig:"createHudText(player, color, x, y, text, shader)", desc:"Creates a HUD text item.", example:"id = createHudText(player, #ffffff, 20, 60, Hi, )" },
   { name:"setHudText", sig:"setHudText(hudId, text)", desc:"Updates a HUD item text.", example:"setHudText(id, Score:100)" },
+  { name:"setHudColor", sig:"setHudColor(hudId, color)", desc:"Updates a HUD item color.", example:"setHudColor(id, #ffcc00)" },
+  { name:"setHudPos", sig:"setHudPos(hudId, x, y)", desc:"Moves a HUD item.", example:"setHudPos(id, 30, 50)" },
+  { name:"setHudSize", sig:"setHudSize(hudId, w, h)", desc:"Resizes a HUD item.", example:"setHudSize(id, 240, 48)" },
+  { name:"setHudVisible", sig:"setHudVisible(hudId, visible)", desc:"Show/hide a HUD item.", example:"setHudVisible(id, false)" },
+  { name:"setHudZ", sig:"setHudZ(hudId, z)", desc:"Sets HUD item z-order.", example:"setHudZ(id, 5)" },
+  { name:"setHudBackground", sig:"setHudBackground(hudId, css)", desc:"Sets HUD item background CSS.", example:"setHudBackground(id, rgba(0,0,0,0.5))" },
+  { name:"setHudShader", sig:"setHudShader(hudId, shader)", desc:"Sets HUD item shader/texture.", example:"setHudShader(id, /assets/ui/grad.png)" },
   { name:"removeHud", sig:"removeHud(hudId)", desc:"Removes a HUD item.", example:"removeHud(id)" },
 
   // Players
@@ -31,13 +38,23 @@ export const BUILTIN_DOCS = Object.freeze([
 
   // Cash
   { name:"getCash", sig:"getCash(player)", desc:"Returns player cash.", example:"c = getCash(player)" },
+  { name:"setCash", sig:"setCash(player, amount)", desc:"Sets player cash (host-only).", example:"setCash(player, 500)" },
   { name:"cashAdd", sig:"cashAdd(player, amount)", desc:"Adds cash.", example:"cashAdd(player, 50)" },
+  { name:"cashSub", sig:"cashSub(player, amount)", desc:"Subtracts cash (host-only).", example:"cashSub(player, 25)" },
 
   // Triggers
   { name:"createTrigger", sig:"createTrigger(origin, radius, prompt)", desc:"Creates an interaction trigger.", example:"tid = createTrigger(player, 3, ^2Press F)" },
+  { name:"destroyTrigger", sig:"destroyTrigger(id)", desc:"Removes a trigger.", example:"destroyTrigger(tid)" },
+  { name:"setTriggerPrompt", sig:"setTriggerPrompt(id, text)", desc:"Updates trigger prompt text.", example:"setTriggerPrompt(tid, ^2Hold F)" },
   { name:"onTriggerUse", sig:"onTriggerUse(id, handlerName)", desc:"Bind a handler for trigger use.", example:"onTriggerUse(tid, buyWall)" },
+  { name:"onTriggerEnter", sig:"onTriggerEnter(id, handlerName)", desc:"Bind a handler for trigger enter.", example:"onTriggerEnter(tid, enterZone)" },
+  { name:"onTriggerExit", sig:"onTriggerExit(id, handlerName)", desc:"Bind a handler for trigger exit.", example:"onTriggerExit(tid, exitZone)" },
+  { name:"setTriggerRadius", sig:"setTriggerRadius(id, radius)", desc:"Sets trigger radius.", example:"setTriggerRadius(tid, 4)" },
+  { name:"setTriggerEnabled", sig:"setTriggerEnabled(id, enabled)", desc:"Enable/disable a trigger.", example:"setTriggerEnabled(tid, false)" },
   { name:"setTriggerCooldown", sig:"setTriggerCooldown(id, ms)", desc:"Cooldown between uses.", example:"setTriggerCooldown(tid, 500)" },
   { name:"setTriggerHoldTime", sig:"setTriggerHoldTime(id, ms)", desc:"Require holding F/E for ms.", example:"setTriggerHoldTime(tid, 600)" },
+  { name:"getTriggerHoldProgress", sig:"getTriggerHoldProgress(id)", desc:"Returns hold progress (0..1).", example:"p = getTriggerHoldProgress(tid)" },
+  { name:"getAllTriggers", sig:"getAllTriggers()", desc:"Returns all triggers.", example:"trigs = getAllTriggers()" },
 
   // Entities
   { name:"spawnEntity", sig:"spawnEntity(type, origin, opts)", desc:"Spawns a script entity (box/sphere/cylinder/model).", example:"e = spawnEntity(box, player, {tag:wallbuy})" },
@@ -75,6 +92,10 @@ export const BUILTIN_DOCS = Object.freeze([
   // Vars
   { name:"setVar", sig:"setVar(key, val)", desc:"Set a global script variable.", example:"setVar(powerOn, 1)" },
   { name:"getVar", sig:"getVar(key)", desc:"Get a global script variable.", example:"v = getVar(powerOn)" },
+  { name:"setPlayerVar", sig:"setPlayerVar(player, key, val)", desc:"Set a per-player script variable.", example:"setPlayerVar(player, perk, 1)" },
+  { name:"getPlayerVar", sig:"getPlayerVar(player, key)", desc:"Get a per-player script variable.", example:"p = getPlayerVar(player, perk)" },
+  { name:"setEntityVar", sig:"setEntityVar(entity, key, val)", desc:"Set a per-entity script variable.", example:"setEntityVar(ent, active, 1)" },
+  { name:"getEntityVar", sig:"getEntityVar(entity, key)", desc:"Get a per-entity script variable.", example:"v = getEntityVar(ent, active)" },
   { name:"getScreenSize", sig:"getScreenSize()", desc:"Returns {w,h} for the current viewport.", example:"s = getScreenSize()" },
   { name:"getLocalPlayerId", sig:"getLocalPlayerId()", desc:"Returns the local player id.", example:"pid = getLocalPlayerId()" },
   { name:"isHost", sig:"isHost()", desc:"Returns true if this client is the host/server.", example:"if(isHost()){ ... }" },
@@ -87,6 +108,16 @@ export const BUILTIN_DOCS = Object.freeze([
   // Audio
   { name:"playSound", sig:"playSound(player, soundId)", desc:"Play a sound (client-side).", example:"playSound(player, buy)" },
   { name:"playSoundAll", sig:"playSoundAll(soundId)", desc:"Play a sound for everyone (client-side).", example:"playSoundAll(round_start)" },
+
+  // World helpers
+  { name:"worldClear", sig:"worldClear()", desc:"Clears the current world (host-only).", example:"worldClear()" },
+  { name:"addFloor", sig:"addFloor(size)", desc:"Adds a floor (host-only).", example:"addFloor(60)" },
+  { name:"addWalls", sig:"addWalls(size, height)", desc:"Adds boundary walls (host-only).", example:"addWalls(60, 3)" },
+  { name:"addCrate", sig:"addCrate(x, y, z)", desc:"Adds a crate (host-only).", example:"addCrate(0, 0.6, 0)" },
+  { name:"setPlayerSpawn", sig:"setPlayerSpawn(x, z)", desc:"Sets player spawn (host-only).", example:"setPlayerSpawn(0, 0)" },
+  { name:"addZombieSpawn", sig:"addZombieSpawn(x, z)", desc:"Adds a zombie spawn (host-only).", example:"addZombieSpawn(10, -6)" },
+  { name:"setWaveTarget", sig:"setWaveTarget(n)", desc:"Sets zombies per wave (host-only).", example:"setWaveTarget(24)" },
+  { name:"setSpawnEveryMs", sig:"setSpawnEveryMs(ms)", desc:"Sets spawn interval (host-only).", example:"setSpawnEveryMs(900)" },
 ]);
 
 function _clampText(s, max=300){

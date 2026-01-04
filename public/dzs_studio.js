@@ -17,6 +17,10 @@ const els = {
   importBtn: document.getElementById("importBtn"),
   fileInput: document.getElementById("fileInput"),
   refreshBtn: document.getElementById("refreshBtn"),
+  panelProblemsTab: document.getElementById("panelProblemsTab"),
+  panelOutputTab: document.getElementById("panelOutputTab"),
+  problemsView: document.getElementById("problemsView"),
+  outputView: document.getElementById("outputView"),
 };
 
 const channel = new BroadcastChannel("dzs-studio");
@@ -48,6 +52,7 @@ function log(msg){
   state.output.push({ msg: String(msg || ""), ts: Date.now() });
   if(state.output.length > 200) state.output.shift();
   renderOutput();
+  setPanelView("output");
 }
 
 function renderOutput(){
@@ -62,6 +67,7 @@ function renderOutput(){
 
 function renderProblems(){
   els.problems.innerHTML = "";
+  setPanelView("problems");
   if(!state.problems.length){
     const div = document.createElement("div");
     div.textContent = "No problems.";
@@ -97,6 +103,14 @@ function updateStatus(){
   const queued = state.queue.length;
   els.statusLine.textContent = `Match: ${matchId} | Host: ${hostId} | You: ${clientId} | Status: ${status} | Queued: ${queued}`;
   els.injectBtn.disabled = !isHost();
+}
+
+function setPanelView(view){
+  const isProblems = view === "problems";
+  if(els.panelProblemsTab) els.panelProblemsTab.classList.toggle("active", isProblems);
+  if(els.panelOutputTab) els.panelOutputTab.classList.toggle("active", !isProblems);
+  if(els.problemsView) els.problemsView.classList.toggle("active", isProblems);
+  if(els.outputView) els.outputView.classList.toggle("active", !isProblems);
 }
 
 function setEditorText(text, filename){
@@ -546,6 +560,12 @@ function attachEvents(){
     await fetchInstalled();
   });
   els.clientId.addEventListener("change", updateStatus);
+  if(els.panelProblemsTab){
+    els.panelProblemsTab.addEventListener("click", ()=> setPanelView("problems"));
+  }
+  if(els.panelOutputTab){
+    els.panelOutputTab.addEventListener("click", ()=> setPanelView("output"));
+  }
 }
 
 async function boot(){
@@ -574,6 +594,7 @@ async function boot(){
     theme: "vs-dark",
     minimap: { enabled: false },
     fontSize: 13,
+    fontFamily: "Cascadia Code, Consolas, Liberation Mono, Menlo, Monaco, monospace",
     wordWrap: "on",
     automaticLayout: true,
   });

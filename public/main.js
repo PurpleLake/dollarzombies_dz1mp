@@ -237,9 +237,120 @@ const session = engine.ctx.session = {
   mpGamemode: options.get("mpGamemode") || "TDM",
   mapSelections: { zm: defaultZm.id, mp: defaultMp.id },
   mapId: initialMode === "mp" ? defaultMp.id : defaultZm.id,
+  matchTypeByMode: { mp: "public", zm: "public" },
 };
 setUiMode(session.mode);
 engine.ctx.net?.setMode?.(session.mode);
+
+const CUSTOM_MAP_KEY = "dz_custom_maps_v1";
+let customMaps = loadCustomMaps();
+let pendingImportMode = "zm";
+
+function normalizeModeTag(tag){
+  const t = String(tag || "").toLowerCase();
+  if(t === "mp" || t === "multiplayer") return "mp";
+  if(t === "zm" || t === "zombies" || t === "zombie") return "zm";
+  return null;
+}
+
+function normalizeCustomMapRecord(record){
+  if(!record || !record.id) return null;
+  const rawModes = Array.isArray(record.modes) ? record.modes : (record.mode ? [record.mode] : []);
+  const modes = rawModes.map(normalizeModeTag).filter(Boolean);
+  const entryDzmapData = record.entryDzmapData || null;
+  return {
+    id: String(record.id),
+    name: String(record.name || record.id),
+    desc: String(record.desc || "Custom map"),
+    preview: String(record.preview || ""),
+    entryDzmapData,
+    modes: modes.length ? modes : ["zm"],
+    isCustom: true,
+  };
+}
+
+function loadCustomMaps(){
+  try{
+    const raw = localStorage.getItem(CUSTOM_MAP_KEY);
+    if(!raw) return [];
+    const parsed = JSON.parse(raw);
+    if(!Array.isArray(parsed)) return [];
+    return parsed.map(normalizeCustomMapRecord).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function persistCustomMaps(){
+  try{
+    const payload = customMaps.map(m=>({
+      id: m.id,
+      name: m.name,
+      desc: m.desc,
+      preview: m.preview,
+      modes: m.modes,
+      entryDzmapData: m.entryDzmapData,
+    }));
+    localStorage.setItem(CUSTOM_MAP_KEY, JSON.stringify(payload));
+  } catch {}
+}
+
+function getCustomMapsForMode(mode){
+  const key = mode === "mp" ? "mp" : "zm";
+  return customMaps.filter(m=>Array.isArray(m.modes) && m.modes.includes(key));
+}
+
+async function importCustomMapFromFile(file){
+  const text = await file.text();
+  let data;
+  try{
+    data = JSON.parse(text);
+  } catch {
+    throw new Error("Invalid JSON");
+  }
+  if(!data || data.format !== "dzmap"){
+    throw new Error("Invalid dzmap file");
+  }
+  const baseName = String(file?.name || "custom").replace(/\.dzmap$/i, "");
+  const rawModes = Array.isArray(data?.meta?.modes) ? data.meta.modes : [];
+  const modes = rawModes.map(normalizeModeTag).filter(Boolean);
+  const fallbackMode = pendingImportMode === "mp" ? "mp" : "zm";
+  const record = {
+    id: `custom_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+    name: String(data?.meta?.name || baseName || "Custom Map"),
+    desc: String(data?.meta?.desc || data?.meta?.description || "Custom map"),
+    preview: String(data?.meta?.preview || ""),
+    entryDzmapData: data,
+    modes: modes.length ? modes : [fallbackMode],
+    isCustom: true,
+  };
+  customMaps.push(record);
+  persistCustomMaps();
+  return record;
+}
+
+const mapImportInput = document.createElement("input");
+mapImportInput.type = "file";
+mapImportInput.accept = ".dzmap,application/json";
+mapImportInput.style.display = "none";
+document.body.appendChild(mapImportInput);
+mapImportInput.addEventListener("change", async ()=>{
+  const file = mapImportInput.files?.[0] || null;
+  mapImportInput.value = "";
+  if(!file) return;
+  try{
+    const record = await importCustomMapFromFile(file);
+    menu.toast(`Map imported: ${record.name}`);
+    if(record?.id){
+      if(pendingImportMode === "mp") session.mapSelections.mp = record.id;
+      else session.mapSelections.zm = record.id;
+      session.mapId = record.id;
+    }
+    showPreLobby(session.mode);
+  } catch (err){
+    menu.toast(`Map import failed: ${err?.message || err}`);
+  }
+});
 
 const ClientState = Object.freeze({
   MENU: "MENU",
@@ -275,8 +386,10 @@ function setClientState(next){
   matchSession.state = next;
 }
 
-function getModeMaps(mode){
-  return mode === "mp" ? mpMaps : zmMaps;
+function getModeMaps(mode, { includeCustom = true } = {}){
+  const base = mode === "mp" ? mpMaps : zmMaps;
+  if(!includeCustom) return base;
+  return [...base, ...getCustomMapsForMode(mode)];
 }
 
 function getModeSelection(mode){
@@ -288,8 +401,8 @@ function setModeSelection(mode, id){
   else session.mapSelections.zm = id;
 }
 
-function resolveMapIdForMode(mode){
-  const maps = getModeMaps(mode);
+function resolveMapIdForMode(mode, { includeCustom = true } = {}){
+  const maps = getModeMaps(mode, { includeCustom });
   const fallback = maps.find(m=>!m.disabled) || maps[0];
   const selected = getModeSelection(mode) || fallback?.id;
   const valid = maps.find(m=>m.id === selected && !m.disabled) ? selected : fallback?.id;
@@ -297,10 +410,30 @@ function resolveMapIdForMode(mode){
   return valid;
 }
 
-function isMapIdValidForMode(mode, id){
+function isMapIdValidForMode(mode, id, { includeCustom = true } = {}){
   if(!id) return false;
-  const maps = getModeMaps(mode);
+  const maps = getModeMaps(mode, { includeCustom });
   return Boolean(maps.find(m=>m.id === id && !m.disabled));
+}
+
+function getMatchTypeKey(mode){
+  return mode === "mp" ? "mp" : "zm";
+}
+
+function getMatchType(mode){
+  const key = getMatchTypeKey(mode);
+  return session.matchTypeByMode[key] || "public";
+}
+
+function setMatchType(mode, type){
+  const key = getMatchTypeKey(mode);
+  session.matchTypeByMode[key] = type === "private" ? "private" : "public";
+}
+
+function getMapDefForMode(mode, id, { includeCustom = true } = {}){
+  const maps = getModeMaps(mode, { includeCustom });
+  const match = maps.find(m=>m.id === id && !m.disabled);
+  return match || maps.find(m=>!m.disabled) || maps[0];
 }
 
 const lobby = new LobbyController({
@@ -350,6 +483,14 @@ engine.events.on("match:lobbyState", (payload)=>{
   matchSession.matchGamemode = payload.gamemode || matchSession.matchGamemode;
   matchSession.hostPlayerId = payload.hostPlayerId || matchSession.hostPlayerId;
   if(payload.gamemode) session.mpGamemode = payload.gamemode;
+  if(Array.isArray(payload.mapPool) && payload.mapPool.length){
+    const first = payload.mapPool[0];
+    if(first?.id){
+      session.mapId = first.id;
+      const uiMode = matchModeToUi(payload.mode || matchSession.matchMode || "zombies");
+      setModeSelection(uiMode === "mp" ? "mp" : "zm", first.id);
+    }
+  }
 });
 
 engine.events.on("match:started", ({ matchId })=>{
@@ -395,12 +536,11 @@ engine.events.on("server:master", (payload)=>{
 });
 
 function getCurrentMapDef(mode=session.mode){
-  const pick = isMapIdValidForMode(mode, session.mapId)
+  const pick = isMapIdValidForMode(mode, session.mapId, { includeCustom: true })
     ? session.mapId
-    : resolveMapIdForMode(mode);
+    : resolveMapIdForMode(mode, { includeCustom: true });
   session.mapId = pick;
-  if(mode === "mp") return getMpMap(pick);
-  return getZmMap(pick);
+  return getMapDefForMode(mode, pick, { includeCustom: true });
 }
 
 function resetEcs(){
@@ -474,6 +614,19 @@ async function loadMapForMode(mode, mapDef){
   engine.ctx.world = builder;
   engine.ctx.worldBuilder = builder;
   try { builder.clearWorld?.(); } catch {}
+
+  if(mapDef?.entryDzmapData){
+    const compiler = new MapCompiler(engine);
+    const raw = mapDef.entryDzmapData;
+    let data = raw;
+    if(typeof raw === "string"){
+      try { data = JSON.parse(raw); } catch { throw new Error("Invalid dzmap data"); }
+    }
+    const build = compiler.compile(data, { mode, clearWorld:false, mapDef });
+    const spawns = build.spawnPoints || {};
+    engine.events.emit(`${mode}:mapLoaded`, { map: mapDef.id });
+    return spawns;
+  }
 
   const dzmapPath = mapDef.entryDzmap || (mapDef.entryScript && mapDef.entryScript.endsWith(".dzmap") ? mapDef.entryScript : null);
   if(dzmapPath){
@@ -599,9 +752,13 @@ function showPreLobby(mode=session.mode){
 
   const isMp = session.mode === "mp";
   const mapMode = isMp ? "mp" : "zm";
-  const maps = isMp ? [] : getModeMaps(mapMode);
-  const mapId = resolveMapIdForMode(mapMode);
-  if(!isMp && mapId) session.mapId = mapId;
+  const currentMatchType = getMatchType(mapMode);
+  const isPrivate = currentMatchType === "private";
+  const baseMaps = getModeMaps(mapMode, { includeCustom: false });
+  const customMaps = isPrivate ? getCustomMapsForMode(mapMode) : [];
+  const maps = isMp ? (isPrivate ? baseMaps : []) : baseMaps;
+  const mapId = maps.length ? resolveMapIdForMode(mapMode, { includeCustom: isPrivate }) : null;
+  if(mapId) session.mapId = mapId;
 
   if(isMp){
     const gm = getMpGamemode(session.mpGamemode || "TDM");
@@ -613,26 +770,35 @@ function showPreLobby(mode=session.mode){
   menu.setOverlay(null);
   menu.setScreen(PreLobbyScreen({
     mode: session.mode,
+    matchType: currentMatchType,
     maps,
+    customMaps: isPrivate ? customMaps : [],
     selectedMapId: mapId,
-    gamemodes: mpGamemodes,
-    selectedGamemode: session.mpGamemode,
     preferSolo: session.mode === "zm_solo",
     onSelectMap: (id)=>{
       if(!id) return;
       session.mapId = id;
-      setModeSelection("zm", id);
+      setModeSelection(mapMode, id);
     },
-    onSelectGamemode: (id)=>{
-      const gm = getMpGamemode(id);
-      session.mpGamemode = gm?.id || "TDM";
-      options.set("mpGamemode", session.mpGamemode);
+    onSelectMatchType: (type)=>{
+      setMatchType(mapMode, type);
+      if(type === "private"){
+        const nextId = resolveMapIdForMode(mapMode, { includeCustom: true });
+        if(nextId) session.mapId = nextId;
+      }
     },
     onEditClass: ()=> showClassSelect({ returnToPreLobby:true }),
     onBack: ()=> showMainMenu(),
-    onFindMatch: ()=> queueForMode(isMp ? "mp" : "zm"),
+    onFindPublicGame: ()=> isMp ? showMpModeSelect() : queueForMode("zm"),
+    onCreatePrivateMatch: ()=> createPrivateLobby(mapMode),
     onPlaySolo: ()=> queueForMode("zm_solo"),
+    onImportMap: ()=> openMapImportDialog(mapMode),
   }));
+}
+
+function openMapImportDialog(mode){
+  pendingImportMode = mode === "mp" ? "mp" : "zm";
+  mapImportInput.click();
 }
 
 function showQueue(mode=session.mode){
@@ -650,10 +816,31 @@ function showQueue(mode=session.mode){
   menu.setScreen(view.screen);
 }
 
+function createPrivateLobby(mode="zm"){
+  const uiMode = mode === "mp" ? "mp" : "zm";
+  const mapId = resolveMapIdForMode(uiMode, { includeCustom: true });
+  if(mapId) session.mapId = mapId;
+  const mapDef = getMapDefForMode(uiMode, mapId, { includeCustom: true });
+  const mapPool = mapDef ? [mapDef] : [];
+  const gamemode = uiMode === "mp" ? (session.mpGamemode || "TDM") : null;
+  matchSession.matchMode = uiModeToMatch(uiMode);
+  matchSession.matchGamemode = gamemode;
+  matchSession.matchId = null;
+  matchSession.hostPlayerId = null;
+  menu.toast("Creating private lobby...");
+  engine.ctx.net?.sendCreateMatch?.({
+    mode: matchSession.matchMode,
+    gamemode,
+    isPrivate: true,
+    mapPool,
+  });
+}
+
 function queueForMode(mode){
   session.mode = mode || "zm";
   setUiMode(session.mode);
   if(session.mode === "zm_solo"){
+    session.mapId = resolveMapIdForMode("zm", { includeCustom: true });
     startGame("zm_solo");
     return;
   }
@@ -662,7 +849,9 @@ function queueForMode(mode){
     session.mpGamemode = g?.id || "TDM";
     options.set("mpGamemode", session.mpGamemode);
   }
-  session.mapId = resolveMapIdForMode(session.mode);
+  const mapMode = session.mode === "mp" ? "mp" : "zm";
+  const includeCustom = getMatchType(mapMode) === "private";
+  session.mapId = resolveMapIdForMode(mapMode, { includeCustom });
   matchSession.matchMode = uiModeToMatch(session.mode);
   matchSession.matchId = null;
   matchSession.hostPlayerId = null;
@@ -790,6 +979,12 @@ function showClassSelect({ returnToLobby=false, returnToPreLobby=false } = {}){
   }));
 }
 
+function showCustomGames(){
+  const baseMode = session.mode === "mp" ? "mp" : "zm";
+  setMatchType(baseMode, "private");
+  showPreLobby(baseMode);
+}
+
 function showMainMenu(){
   setClientState(ClientState.MENU);
   engine.ctx.net?.setMode?.("idle");
@@ -804,6 +999,7 @@ function showMainMenu(){
     onClass: ()=> showClassSelect(),
     onBrowser: ()=> showServerBrowser(),
     onSettings: ()=> showSettings({ overlay:false }),
+    onCustomGames: ()=> showCustomGames(),
     playerName: options.get("playerName"),
     soloOnly: engine.ctx.buildFlags?.soloMenuOnly,
     onName: (name)=>{

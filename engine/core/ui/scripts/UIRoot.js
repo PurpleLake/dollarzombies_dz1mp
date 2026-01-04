@@ -180,6 +180,11 @@ export class UIRoot {
         overflow:auto;
         padding-right:2px;
       }
+      .dz-prelobby-subactions{
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap;
+      }
       .dz-prelobby-item{
         all:unset;
         cursor:pointer;
@@ -324,6 +329,10 @@ export class UIRoot {
       .dz-prelobby-btn.is-primary{
         border-color:rgba(255,184,77,0.8);
         box-shadow: 0 0 0 2px rgba(255,184,77,0.2);
+      }
+      .dz-prelobby-btn.is-subaction{
+        padding:6px 10px;
+        font-size:10px;
       }
       @media (max-width: 900px){
         .dz-prelobby-grid{grid-template-columns:1fr}

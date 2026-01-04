@@ -1300,7 +1300,8 @@ export class LobbyUI {
       const entry = this.mapCards.get(String(map.id));
       if(!entry) continue;
       const { card, thumb, name, meta, badge } = entry;
-      const isDisabled = Boolean(map.disabled || !map.entryScript);
+      const hasEntry = Boolean(map.entryScript || map.entryDzmap || map.entryDzmapData);
+      const isDisabled = Boolean(map.disabled || !hasEntry);
       card.classList.toggle("is-disabled", isDisabled);
       const selected = localVote && String(localVote) === String(map.id);
       card.classList.toggle("is-selected", selected);

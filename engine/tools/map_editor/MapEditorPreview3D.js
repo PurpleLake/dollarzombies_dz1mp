@@ -300,12 +300,34 @@ export class MapEditorPreview3D {
       });
       let geo = null;
       const kind = String(p.kind || "box");
-      if(kind === "sphere") geo = new THREE.SphereGeometry(s * 0.5, 16, 12);
-      else if(kind === "cylinder") geo = new THREE.CylinderGeometry(s * 0.35, s * 0.35, s, 12);
-      else if(kind === "tile") geo = new THREE.BoxGeometry(s, 0.08, s);
-      else geo = new THREE.BoxGeometry(s, s, s);
+      if(kind === "sphere"){
+        const r = toNumber(p.r, s * 0.5);
+        geo = new THREE.SphereGeometry(r, 16, 12);
+      } else if(kind === "cylinder"){
+        const rTop = toNumber(p.rTop, s * 0.35);
+        const rBottom = toNumber(p.rBottom, s * 0.35);
+        const h = toNumber(p.h, s);
+        geo = new THREE.CylinderGeometry(rTop, rBottom, h, 12);
+      } else if(kind === "tile"){
+        const sx = toNumber(p.sx, s);
+        const sy = toNumber(p.sy, 0.08);
+        const sz = toNumber(p.sz, s);
+        geo = new THREE.BoxGeometry(sx, sy, sz);
+      } else {
+        const sx = toNumber(p.sx, s);
+        const sy = toNumber(p.sy, s);
+        const sz = toNumber(p.sz, s);
+        geo = new THREE.BoxGeometry(sx, sy, sz);
+      }
       const mesh = new THREE.Mesh(geo, mat);
-      const y = (kind === "tile") ? (0.04 + toNumber(p.z, 0)) : ((s / 2) + toNumber(p.z, 0));
+      const height = (kind === "sphere")
+        ? (toNumber(p.r, s * 0.5) * 2)
+        : (kind === "cylinder")
+          ? toNumber(p.h, s)
+          : (kind === "tile")
+            ? toNumber(p.sy, 0.08)
+            : toNumber(p.sy, s);
+      const y = (height / 2) + toNumber(p.z, 0);
       mesh.position.set(toNumber(p.x, 0), y, toNumber(p.y, 0));
       mesh.rotation.y = -degToRad(p.rot || 0);
       mesh.userData.selectable = { type:"prop", id:p.id };

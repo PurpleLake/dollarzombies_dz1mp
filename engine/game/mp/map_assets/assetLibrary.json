@@ -61,6 +61,106 @@
       "scale": 6,
       "material": { "color": "#2c4b2f" },
       "collision": false
+    },
+    {
+      "id": "wall_short",
+      "name": "Wall Short",
+      "kind": "box",
+      "sx": 4,
+      "sy": 2.6,
+      "sz": 0.6,
+      "material": { "color": "#4b5563" },
+      "collision": true
+    },
+    {
+      "id": "wall_long",
+      "name": "Wall Long",
+      "kind": "box",
+      "sx": 8,
+      "sy": 2.6,
+      "sz": 0.6,
+      "material": { "color": "#3f4856" },
+      "collision": true
+    },
+    {
+      "id": "wall_arch",
+      "name": "Arch Frame",
+      "kind": "box",
+      "sx": 4,
+      "sy": 3,
+      "sz": 0.6,
+      "material": { "color": "#525a66" },
+      "collision": true
+    },
+    {
+      "id": "ramp_block",
+      "name": "Ramp Block",
+      "kind": "box",
+      "sx": 4,
+      "sy": 1.2,
+      "sz": 4,
+      "material": { "color": "#5a4f3b" },
+      "collision": true
+    },
+    {
+      "id": "fence_segment",
+      "name": "Fence Segment",
+      "kind": "box",
+      "sx": 6,
+      "sy": 1.2,
+      "sz": 0.2,
+      "material": { "color": "#384353" },
+      "collision": true
+    },
+    {
+      "id": "tunnel_segment",
+      "name": "Tunnel Segment",
+      "kind": "box",
+      "sx": 6,
+      "sy": 3,
+      "sz": 3,
+      "material": { "color": "#2e3440" },
+      "collision": true
+    },
+    {
+      "id": "wall_tunnel",
+      "name": "Wall With Tunnel",
+      "kind": "box",
+      "sx": 6,
+      "sy": 3,
+      "sz": 0.6,
+      "material": { "color": "#2e3b4f" },
+      "collision": true
+    },
+    {
+      "id": "house_block",
+      "name": "House Block",
+      "kind": "box",
+      "sx": 8,
+      "sy": 3.2,
+      "sz": 6,
+      "material": { "color": "#4a3d2c" },
+      "collision": true
+    },
+    {
+      "id": "well_round",
+      "name": "Well",
+      "kind": "cylinder",
+      "rTop": 1.2,
+      "rBottom": 1.2,
+      "h": 1.2,
+      "material": { "color": "#4a4a4a" },
+      "collision": true
+    },
+    {
+      "id": "pool_round",
+      "name": "Pool",
+      "kind": "cylinder",
+      "rTop": 3.2,
+      "rBottom": 3.2,
+      "h": 0.6,
+      "material": { "color": "#2a5b6e" },
+      "collision": true
     }
   ]
 }

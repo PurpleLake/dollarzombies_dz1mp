@@ -96,6 +96,27 @@ export class WorldBuilder {
     return this.addWallBox({ width:size, height:size, depth:size, x, y: y ?? size/2, z, color });
   }
 
+  addCylinder({ rTop=1, rBottom=1, height=1, x=0, y=null, z=0, color=0x3a4455 } = {}){
+    const mat = new this.THREE.MeshStandardMaterial({ color, roughness: 0.85 });
+    const geo = new this.THREE.CylinderGeometry(rTop, rBottom, height, 16);
+    const mesh = new this.THREE.Mesh(geo, mat);
+    mesh.position.set(x, y ?? (height/2), z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    this.scene?.add(mesh);
+    this.objects.push(mesh);
+    this.colliders.push({
+      type: "cylinder",
+      x,
+      y: 0,
+      z,
+      rTop: Number(rTop || 1),
+      rBottom: Number(rBottom || 1),
+      h: Number(height || 1),
+    });
+    return mesh;
+  }
+
   addLight({ type="ambient", color=0xffffff, intensity=0.8, position=null, castShadow=true, distance=120 } = {}){
     let light;
     if(type === "directional"){

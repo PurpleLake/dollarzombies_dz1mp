@@ -68,7 +68,7 @@ function modeCard({ title, desc, imgA, imgB, onPick }){
   return card;
 }
 
-export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode, onBrowser, playerName="", onName, soloOnly=false }){
+export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode, onBrowser, playerName="", onName, soloOnly=false, onProfile, onCustomGames }){
   const screen = document.createElement("div");
   screen.className = "dz-screen";
 
@@ -92,6 +92,29 @@ export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode,
   grid.style.gridTemplateColumns="repeat(auto-fit, minmax(220px, 1fr))";
   grid.style.gap="10px";
   grid.style.marginTop="10px";
+
+  const nameRow = document.createElement("div");
+  nameRow.className = "dz-row";
+  nameRow.style.marginTop = "10px";
+  const nameLabel = document.createElement("div");
+  nameLabel.className = "dz-help";
+  nameLabel.textContent = "Username";
+  const nameInput = document.createElement("input");
+  nameInput.className = "dz-input";
+  nameInput.placeholder = "Player";
+  nameInput.maxLength = 20;
+  nameInput.value = String(playerName || "");
+  nameInput.addEventListener("input", ()=> onName?.(nameInput.value));
+  nameRow.appendChild(nameLabel);
+  nameRow.appendChild(nameInput);
+
+  function focusNameInput(){
+    try{
+      nameRow.scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch {}
+    nameInput.focus();
+    nameInput.select();
+  }
 
   const zm = modeCard({
     title:"Zombies (Co-op)",
@@ -117,6 +140,22 @@ export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode,
     onPick: ()=>onMode?.("mp"),
   });
 
+  const profile = modeCard({
+    title:"Create Profile",
+    desc:"Set your username and get ready to drop in.",
+    imgA:"/public/assets/ui/maps/zm_facility.png",
+    imgB:"/public/assets/ui/maps/mp_arena.png",
+    onPick: ()=> onProfile ? onProfile() : focusNameInput(),
+  });
+
+  const custom = modeCard({
+    title:"Custom Games",
+    desc:"Host private matches and load your custom maps.",
+    imgA:"/public/assets/ui/maps/mp_arena.png",
+    imgB:"/public/assets/ui/maps/zm_facility.png",
+    onPick: ()=> onCustomGames?.(),
+  });
+
   if(soloOnly){
     grid.appendChild(zmSolo);
   } else {
@@ -124,6 +163,8 @@ export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode,
     grid.appendChild(zmSolo);
     grid.appendChild(mp);
   }
+  grid.appendChild(profile);
+  grid.appendChild(custom);
 
   const row = document.createElement("div");
   row.className = "dz-row";
@@ -137,21 +178,6 @@ export function MainMenuScreen({ onPlay, onClass, onSettings, mode="zm", onMode,
   if(onBrowser){
     row.appendChild(Button({ text:"Server Browser", variant:"secondary", onClick: ()=>onBrowser?.() }));
   }
-
-  const nameRow = document.createElement("div");
-  nameRow.className = "dz-row";
-  nameRow.style.marginTop = "10px";
-  const nameLabel = document.createElement("div");
-  nameLabel.className = "dz-help";
-  nameLabel.textContent = "Username";
-  const nameInput = document.createElement("input");
-  nameInput.className = "dz-input";
-  nameInput.placeholder = "Player";
-  nameInput.maxLength = 20;
-  nameInput.value = String(playerName || "");
-  nameInput.addEventListener("input", ()=> onName?.(nameInput.value));
-  nameRow.appendChild(nameLabel);
-  nameRow.appendChild(nameInput);
 
   const hint = document.createElement("div");
   hint.className = "dz-help";
